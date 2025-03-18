@@ -135,6 +135,8 @@ static void (lua_remove)(lua_State *L, int idx) {
 # define ARCH_ARM
 #elif defined __powerpc64__
 # define ARCH_PPC64
+#elif defined __EMSCRIPTEN__
+# define ARCH_WASM
 #else
 # error
 #endif
