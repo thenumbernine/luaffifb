@@ -2034,6 +2034,37 @@ static int cdata_unm(lua_State* L)
     return 1;
 }
 
+static int cdata_bnot(lua_State* L)
+{
+    struct ctype ct;
+    void* p;
+    int64_t val;
+    int ret;
+
+    lua_settop(L, 1);
+    p = to_cdata(L, 1, &ct);
+
+    ret = call_user_op(L, "__bnot", 1, 2, &ct);
+    if (ret >= 0) {
+        return ret;
+    }
+
+    val = check_intptr(L, 1, p, &ct);
+
+    if (ct.pointers) {
+        luaL_error(L, "can't bitwise-not a pointer value");
+    } else {
+        memset(&ct, 0, sizeof(ct));
+        ct.type = INT64_TYPE;
+        ct.base_size = 8;
+        ct.is_defined = 1;
+        push_number(L, ~val, 0, &ct);
+    }
+
+    return 1;
+}
+
+
 /* returns -ve if no binop was called otherwise returns the number of return
  * arguments */
 static int call_user_binop(lua_State* L, const char* opfield, int lidx, int lusr, const struct ctype* lt, int ridx, int rusr, const struct ctype* rt)
@@ -2250,8 +2281,10 @@ static int cdata_sub(lua_State* L)
         int64_t left = check_intptr(L, 1, lp, &lt);
         int64_t right = check_intptr(L, 2, rp, &rt);
 
-        if (rt.pointers) {
-            luaL_error(L, "NYI: can't subtract a pointer value");
+        if (rt.pointers && lt.pointers) {
+            int64_t res = (left - right) / (lt.pointers > 1 ? sizeof(void*) : lt.base_size);
+            //push_number(L, res, 0, &ct);
+            lua_pushinteger(L, res);		//push int or int64?
 
         } else if (lt.pointers) {
             int64_t res = left - (lt.pointers > 1 ? sizeof(void*) : lt.base_size) * right;
@@ -2313,6 +2346,12 @@ static int cdata_sub(lua_State* L)
 #define DIV(l,r,s) s = l / r
 #define MOD(l,r,s) s = l % r
 #define POW(l,r,s) s = pow(l, r)
+#define IDIV(l,r,s) s = (lua_Integer)(l / r)	//TODO copy out of lua-5.4.7/src/lvm.c
+#define BAND(l,r,s) s = ((lua_Integer)l & (lua_Integer)r)
+#define BOR(l,r,s) s = ((lua_Integer)l | (lua_Integer)r)
+#define BXOR(l,r,s) s = ((lua_Integer)l ^ (lua_Integer)r)
+#define SHL(l,r,s) s = ((lua_Integer)l << (lua_Integer)r)
+#define SHR(l,r,s) s = ((lua_Integer)l >> (lua_Integer)r)
 
 #ifdef HAVE_COMPLEX
 #define MULC(l,r,s) s = l * r
@@ -2326,18 +2365,23 @@ static int cdata_sub(lua_State* L)
 #define MODC(l,r,s) (void) l, (void) r, memset(&s, 0, sizeof(s)), luaL_error(L, "NYI: complex mod")
 #define POWC(l,r,s) (void) l, (void) r, memset(&s, 0, sizeof(s)), luaL_error(L, "NYI: complex pow")
 #endif
+#define IDIVC(l,r,s) (void) l, (void) r, memset(&s, 0, sizeof(s)), luaL_error(L, "NYI: complex idiv")
+#define BANDC(l,r,s) (void) l, (void) r, memset(&s, 0, sizeof(s)), luaL_error(L, "NYI: complex band")
+#define BORC(l,r,s) (void) l, (void) r, memset(&s, 0, sizeof(s)), luaL_error(L, "NYI: complex bor")
+#define BXORC(l,r,s) (void) l, (void) r, memset(&s, 0, sizeof(s)), luaL_error(L, "NYI: complex bxor")
+#define SHLC(l,r,s) (void) l, (void) r, memset(&s, 0, sizeof(s)), luaL_error(L, "NYI: complex shl")
+#define SHRC(l,r,s) (void) l, (void) r, memset(&s, 0, sizeof(s)), luaL_error(L, "NYI: complex shr")
 
-static int cdata_mul(lua_State* L)
-{ NUMBER_ONLY_BINOP("__mul", MUL, MULC); }
-
-static int cdata_div(lua_State* L)
-{ NUMBER_ONLY_BINOP("__div", DIV, DIVC); }
-
-static int cdata_mod(lua_State* L)
-{ NUMBER_ONLY_BINOP("__mod", MOD, MODC); }
-
-static int cdata_pow(lua_State* L)
-{ NUMBER_ONLY_BINOP("__pow", POW, POWC); }
+static int cdata_mul(lua_State* L) { NUMBER_ONLY_BINOP("__mul", MUL, MULC); }
+static int cdata_div(lua_State* L) { NUMBER_ONLY_BINOP("__div", DIV, DIVC); }
+static int cdata_mod(lua_State* L) { NUMBER_ONLY_BINOP("__mod", MOD, MODC); }
+static int cdata_pow(lua_State* L) { NUMBER_ONLY_BINOP("__pow", POW, POWC); }
+static int cdata_idiv(lua_State* L) { NUMBER_ONLY_BINOP("__idiv", IDIV, IDIVC); }
+static int cdata_band(lua_State* L) { NUMBER_ONLY_BINOP("__band", BAND, BANDC); }
+static int cdata_bor(lua_State* L) { NUMBER_ONLY_BINOP("__bor", BOR, BORC); }
+static int cdata_bxor(lua_State* L) { NUMBER_ONLY_BINOP("__bxor", BXOR, BXORC); }
+static int cdata_shl(lua_State* L) { NUMBER_ONLY_BINOP("__shl", SHL, SHLC); }
+static int cdata_shr(lua_State* L) { NUMBER_ONLY_BINOP("__shr", SHR, SHRC); }
 
 #define COMPARE_BINOP(OPSTR, OP, OPC)                                       \
     struct ctype lt, rt;                                                    \
@@ -3075,7 +3119,14 @@ static const luaL_Reg cdata_mt[] = {
     {"__mod", &cdata_mod},
     {"__pow", &cdata_pow},
     {"__unm", &cdata_unm},
-    {"__eq", &cdata_eq},
+    {"__idiv", &cdata_idiv},
+    {"__band", &cdata_band},
+    {"__bor", &cdata_bor},
+    {"__bxor", &cdata_bxor},
+    {"__bnot", &cdata_bnot},
+    {"__shl", &cdata_shl},
+    {"__shr", &cdata_shr},
+	{"__eq", &cdata_eq},
     {"__lt", &cdata_lt},
     {"__le", &cdata_le},
     {"__tostring", &cdata_tostring},

@@ -10,8 +10,27 @@
 .PHONY: build clean headers
 LUA=lua
 
-build:
-	luarocks make
+CFLAGS=-I/usr/local/include/lua-5.4.7
+LDFLAGS=-L/usr/local/lib/lua-5.4.7 -llua.5.4.7
+build: ffi.so
+	#luarocks make
+	# luarocks disagreed so...
+
+ffi.so: call.o ctype.o ffi.o parser.o
+	$(CC) $(LDFLAGS) -shared -o ffi.so
+	install_name_tool -change liblua.5.4.7.so /usr/local/lib/lua-5.4.7/liblua.5.4.7.so ffi.so
+
+call.o: call.c
+	$(CC) $(CFLAGS) -c -o call.o call.c
+
+ctype.o: ctype.c
+	$(CC) $(CFLAGS) -c -o ctype.o ctype.c
+
+ffi.o: ffi.c
+	$(CC) $(CFLAGS) -c -o ffi.o ffi.c
+
+parser.o: parser.c
+	$(CC) $(CFLAGS) -c -o parser.o parser.c
 
 clean:
 	rm -f *.o *.so *.dylib

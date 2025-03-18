@@ -875,7 +875,10 @@ static int parse_type_name(lua_State* L, struct parser* P)
             break;
         } else if (IS_LITERAL(tok, "unsigned")) {
             flags |= UNSIGNED;
-        } else if (IS_LITERAL(tok, "signed")) {
+        } else if (IS_LITERAL(tok, "signed")
+			|| IS_LITERAL(tok, "__signed")
+			|| IS_LITERAL(tok, "__signed__")
+		) {
             flags |= SIGNED;
         } else if (IS_LITERAL(tok, "short")) {
             flags |= SHORT;
@@ -897,7 +900,11 @@ static int parse_type_name(lua_State* L, struct parser* P)
             flags |= DOUBLE;
         } else if (IS_LITERAL(tok, "float")) {
             flags |= FLOAT;
-        } else if (IS_LITERAL(tok, "complex") || IS_LITERAL(tok, "_Complex")) {
+        } else if (IS_LITERAL(tok, "_Complex")
+			|| IS_LITERAL(tok, "complex")
+			|| IS_LITERAL(tok, "__complex")
+			|| IS_LITERAL(tok, "__complex__")
+		) {
             flags |= COMPLEX;
         } else if (IS_LITERAL(tok, "register")) {
             /* ignore */
