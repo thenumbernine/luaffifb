@@ -1989,7 +1989,7 @@ static int call_user_op(lua_State* L, const char* opfield, int idx, int ct_usr, 
 {
     idx = lua_absindex(L, idx);
 
-    if (push_user_mt(L, ct_usr, ct)) {
+    if (!ct->pointers && push_user_mt(L, ct_usr, ct)) {
         lua_pushstring(L, opfield);
         lua_rawget(L, -2);
         if (!lua_isnil(L, -1)) {
@@ -2071,7 +2071,7 @@ static int call_user_binop(lua_State* L, const char* opfield, int lidx, int lusr
     lidx = lua_absindex(L, lidx);
     ridx = lua_absindex(L, ridx);
 
-    if (push_user_mt(L, lusr, lt)) {
+    if (!lt->pointers && push_user_mt(L, lusr, lt)) {
         lua_pushstring(L, opfield);
         lua_rawget(L, -2);
 
@@ -2086,7 +2086,7 @@ static int call_user_binop(lua_State* L, const char* opfield, int lidx, int lusr
         lua_pop(L, 2); /* user_mt and user_mt.op */
     }
 
-    if (push_user_mt(L, rusr, rt)) {
+    if (!rt->pointers && push_user_mt(L, rusr, rt)) {
         lua_pushstring(L, opfield);
         lua_rawget(L, -2);
 
