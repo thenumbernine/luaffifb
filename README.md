@@ -3,11 +3,11 @@ Me picking up the facebook-archive luaffifb project.  Of all the lua-ffi project
 # Changes I've made since forking it:
 
 - `ffi.null` as well as `ffi.NULL`
-- ctype objects can now use their metatables' `__index` just like in vanilla LuaJIT.
+- ctype objects can now use their metatables' `__index` - just like in vanilla LuaJIT.
+- airthmetic on pointers doesn't call into the metatmethod - just like in vanilla LuaJIT.
 
 # Changes still to make:
 
-- `print(ffi.cast('void*', ffi.cast('vec3f_t*', 0)+1))` should show `0xc`, but instead it shows `vec3f(1,1,1)` ... an error in luaffifb with its cdata of pointers' metamethods, esp +, is treating the pointer as its data when it should be doing pointer-arithmetic.
 - why do I think `tonumber(ffi.new('int64_t', 0))` is serializing first and then parsing the string to a number?  Is there a better way to convert int64 boxed type to lua integer ...
 - indexing fields that aren't there should throw exceptions.  I hate it, but I'm staying true to LuaJIT.  or maybe I shouldn't, idk...
 
