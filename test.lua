@@ -22,9 +22,9 @@ local function loadlib(lib)
 end
 
 if _VERSION == 'Lua 5.1' then
-    dlls.__cdecl = loadlib('ffi/libtest')
+    dlls.__cdecl = loadlib('libtest')
 else
-    dlls.__cdecl = ffi.load(package.searchpath('ffi.libtest', package.cpath))
+    dlls.__cdecl = ffi.load(package.searchpath('libtest', package.cpath))
 end
 
 if ffi.arch == 'x86' and ffi.os == 'Windows' then
@@ -901,7 +901,7 @@ if _VERSION ~= 'Lua 5.1' then
     x, y = pairs(v)
     assert(x == 1 and y == 2)
     x, y = ipairs(v)
-    assert(x == 2 and y == 3)
+    assert(x == 2 and y == 3)		-- failing 
 end
 
 -- test for pointer to struct having same metamethods

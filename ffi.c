@@ -668,7 +668,7 @@ static int get_cfunction_address(lua_State* L, int idx, cfunction* addr)
 {
     if (!lua_isfunction(L, idx)) return 0;
 
-    int top = lua_gettop(L);
+//    int top = lua_gettop(L);
 
     // Get the last upvalue
     int n = 2;
@@ -697,7 +697,7 @@ static int get_cfunction_address(lua_State* L, int idx, cfunction* addr)
      * callback_mt
      */
 
-    cfunction* f = lua_touserdata(L, -3);
+    cfunction* f = (cfunction*)lua_touserdata(L, -3);
     *addr = f[1];
     lua_pop(L, 3);
     return 1;
@@ -1201,9 +1201,8 @@ static int should_pack(lua_State *L, int ct_usr, struct ctype* ct, int idx)
         int same = is_same_type(L, ct_usr, -1, ct, &argt);
         lua_pop(L, 1);
         return !same;
-    default:
-        return 1;
     }
+	return 1;
 }
 
 static int do_new(lua_State* L, int is_cast)
@@ -1443,7 +1442,7 @@ static int cdata_gc(lua_State* L)
 
 static int callback_free(lua_State* L)
 {
-    cfunction* p = (cfunction*) lua_touserdata(L, 1);
+    //cfunction* p = (cfunction*) lua_touserdata(L, 1);
     // FIXME: temporarily disabled to prevent SIGTRAP on exit
     // free_code(get_jit(L), L, *p);
     return 0;
@@ -1823,7 +1822,7 @@ err:
 
         if ((uintptr_t) data & PTR_ALIGN_MASK) {
             memcpy(misalignbuf.c, data, sizeof(void*));
-            data = misalignbuf.c;
+            data = (char*)misalignbuf.c;
         }
 #endif
         to = push_cdata(L, -1, &ct);
@@ -1855,7 +1854,7 @@ err:
 
         if ((uintptr_t) data & (ct.base_size - 1)) {
             memcpy(misalignbuf.c, data, ct.base_size);
-            data = misalignbuf.c;
+            data = (char*)misalignbuf.c;
         }
 #endif
 
@@ -2570,6 +2569,42 @@ static int ctype_tostring(lua_State* L)
     return 1;
 }
 
+// ctype's __index points back to its metatype's __index
+static int ctype_index(lua_State * L) {
+    struct ctype ct;
+    assert(lua_type(L, 1) == LUA_TUSERDATA);
+    check_ctype(L, 1, &ct);
+
+	// taken from cdata_index
+    
+	assert(lua_gettop(L) == 3);
+	if (!push_user_mt(L, -1, &ct)) {
+		goto err;
+	}
+
+	lua_pushliteral(L, "__index");
+	lua_rawget(L, -2);
+
+	if (lua_isnil(L, -1)) {
+		goto err;
+	}
+
+	if (lua_istable(L, -1)) {
+		lua_pushvalue(L, 2);
+		lua_gettable(L, -2);
+		return 1;
+	}
+
+	lua_insert(L, 1);
+	lua_settop(L, 3);
+	lua_call(L, 2, LUA_MULTRET);
+	return lua_gettop(L);
+
+err:
+	push_type_name(L, 3, &ct);
+	return luaL_error(L, "type %s has no member %s", lua_tostring(L, -1), lua_tostring(L, 2));
+}
+
 static int cdata_tostring(lua_State* L)
 {
     struct ctype ct;
@@ -2623,12 +2658,12 @@ static int cdata_tostring(lua_State* L)
         return 1;
 
     case INT64_TYPE:
-        sprintf(buf, ct.is_unsigned ? "%"PRIu64 : "%"PRId64, *(uint64_t*) p);
+        sprintf(buf, ct.is_unsigned ? "%" PRIu64 : "%" PRId64, *(uint64_t*) p);
         lua_pushstring(L, buf);
         return 1;
 
     default:
-        sprintf(buf, ct.is_unsigned ? "%"PRId64 : "%"PRId64, (int64_t) check_intptr(L, 1, p, &ct));
+        sprintf(buf, ct.is_unsigned ? "%" PRId64 : "%" PRId64, (int64_t) check_intptr(L, 1, p, &ct));
         lua_pushstring(L, buf);
         return 1;
     }
@@ -2709,7 +2744,7 @@ static int ffi_string(lua_State* L)
             sz = (size_t) luaL_checknumber(L, 2);
 
         } else if (ct.is_array && !ct.is_variable_array) {
-            char* nul = memchr(data, '\0', ct.array_size);
+            char* nul = (char*)memchr(data, '\0', ct.array_size);
             sz = nul ? nul - data : ct.array_size;
 
         } else {
@@ -3106,80 +3141,81 @@ static int ffi_u64(lua_State* L)
 { return do64(L, 1); }
 
 static const luaL_Reg cdata_mt[] = {
-    {"__gc", &cdata_gc},
-    {"__call", &cdata_call},
-    {"free", &cdata_free},
-    {"set", &cdata_set},
-    {"__index", &cdata_index},
-    {"__newindex", &cdata_newindex},
-    {"__add", &cdata_add},
-    {"__sub", &cdata_sub},
-    {"__mul", &cdata_mul},
-    {"__div", &cdata_div},
-    {"__mod", &cdata_mod},
-    {"__pow", &cdata_pow},
-    {"__unm", &cdata_unm},
-    {"__idiv", &cdata_idiv},
-    {"__band", &cdata_band},
-    {"__bor", &cdata_bor},
-    {"__bxor", &cdata_bxor},
-    {"__bnot", &cdata_bnot},
-    {"__shl", &cdata_shl},
-    {"__shr", &cdata_shr},
-	{"__eq", &cdata_eq},
-    {"__lt", &cdata_lt},
-    {"__le", &cdata_le},
-    {"__tostring", &cdata_tostring},
-    {"__concat", &cdata_concat},
-    {"__len", &cdata_len},
-    {"__pairs", &cdata_pairs},
-    {"__ipairs", &cdata_ipairs},
+    {"__gc", cdata_gc},
+    {"__call", cdata_call},
+    {"free", cdata_free},
+    {"set", cdata_set},
+    {"__index", cdata_index},
+    {"__newindex", cdata_newindex},
+    {"__add", cdata_add},
+    {"__sub", cdata_sub},
+    {"__mul", cdata_mul},
+    {"__div", cdata_div},
+    {"__mod", cdata_mod},
+    {"__pow", cdata_pow},
+    {"__unm", cdata_unm},
+    {"__idiv", cdata_idiv},
+    {"__band", cdata_band},
+    {"__bor", cdata_bor},
+    {"__bxor", cdata_bxor},
+    {"__bnot", cdata_bnot},
+    {"__shl", cdata_shl},
+    {"__shr", cdata_shr},
+	{"__eq", cdata_eq},
+    {"__lt", cdata_lt},
+    {"__le", cdata_le},
+    {"__tostring", cdata_tostring},
+    {"__concat", cdata_concat},
+    {"__len", cdata_len},
+    {"__pairs", cdata_pairs},
+    {"__ipairs", cdata_ipairs},
     {NULL, NULL}
 };
 
 static const luaL_Reg callback_mt[] = {
-    {"__gc", &callback_free},
+    {"__gc", callback_free},
     {NULL, NULL}
 };
 
 static const luaL_Reg ctype_mt[] = {
-    {"__call", &ctype_call},
-    {"__new", &ctype_new},
-    {"__tostring", &ctype_tostring},
-    {NULL, NULL}
+    {"__call", ctype_call},
+    {"__new", ctype_new},
+    {"__tostring", ctype_tostring},
+    {"__index", ctype_index},
+	{NULL, NULL}
 };
 
 static const luaL_Reg cmodule_mt[] = {
-    {"__index", &cmodule_index},
-    {"__newindex", &cmodule_newindex},
+    {"__index", cmodule_index},
+    {"__newindex", cmodule_newindex},
     {NULL, NULL}
 };
 
 static const luaL_Reg jit_mt[] = {
-    {"__gc", &jit_gc},
+    {"__gc", jit_gc},
     {NULL, NULL}
 };
 
 static const luaL_Reg ffi_reg[] = {
-    {"cdef", &ffi_cdef},
-    {"load", &ffi_load},
-    {"new", &ffi_new},
-    {"typeof", &ffi_typeof},
-    {"cast", &ffi_cast},
-    {"metatype", &ffi_metatype},
-    {"gc", &ffi_gc},
-    {"sizeof", &ffi_sizeof},
-    {"alignof", &ffi_alignof},
-    {"offsetof", &ffi_offsetof},
-    {"istype", &ffi_istype},
-    {"errno", &ffi_errno},
-    {"string", &ffi_string},
-    {"copy", &ffi_copy},
-    {"fill", &ffi_fill},
-    {"abi", &ffi_abi},
-    {"debug", &ffi_debug},
-    {"i64", &ffi_i64},
-    {"u64", &ffi_u64},
+    {"cdef", ffi_cdef},
+    {"load", ffi_load},
+    {"new", ffi_new},
+    {"typeof", ffi_typeof},
+    {"cast", ffi_cast},
+    {"metatype", ffi_metatype},
+    {"gc", ffi_gc},
+    {"sizeof", ffi_sizeof},
+    {"alignof", ffi_alignof},
+    {"offsetof", ffi_offsetof},
+    {"istype", ffi_istype},
+    {"errno", ffi_errno},
+    {"string", ffi_string},
+    {"copy", ffi_copy},
+    {"fill", ffi_fill},
+    {"abi", ffi_abi},
+    {"debug", ffi_debug},
+    {"i64", ffi_i64},
+    {"u64", ffi_u64},
     {NULL, NULL}
 };
 
@@ -3289,7 +3325,7 @@ static int setup_upvals(lua_State* L)
 
 #else /* !_WIN32 */
         size_t sz = sizeof(void*) * 5;
-        void** libs = lua_newuserdata(L, sz);
+        void** libs = (void**)lua_newuserdata(L, sz);
         memset(libs, 0, sz);
 
         libs[0] = LoadLibraryA(NULL); /* exe */
@@ -3372,6 +3408,10 @@ static int setup_upvals(lua_State* L)
         /* add ffi.NULL */
         push_cdata(L, 0, &ct);
         lua_setfield(L, 1, "NULL");
+        
+		/* add ffi.null */
+        push_cdata(L, 0, &ct);
+        lua_setfield(L, 1, "null");
 
         memset(&ct, 0, sizeof(ct));
         ct.type = COMPLEX_DOUBLE_TYPE;
