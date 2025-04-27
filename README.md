@@ -2,9 +2,9 @@ Me picking up the facebook-archive luaffifb project.  Of all the lua-ffi project
 
 # Changes I've made since forking it:
 
+- ctype objects as well as cdata objects can now use their metatables' `__index` - just like in vanilla LuaJIT.
+- arithmetic on pointers no longer calls into the metatmethod of the underlying ctype - just like in vanilla LuaJIT.
 - `ffi.null` as well as `ffi.NULL`
-- ctype objects can now use their metatables' `__index` - just like in vanilla LuaJIT.
-- arithmetic on pointers doesn't call into the metatmethod - just like in vanilla LuaJIT.
 
 # Changes still to make:
 
