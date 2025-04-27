@@ -36,7 +36,183 @@ static void SetLastError(int err)
 #endif
 
 
-#ifdef _WIN64
+#ifdef __wasm__
+
+// wasm libffi compile_ goes here, not somewhere else, cuz I want to generate a diff patch
+#include <ffi.h>
+
+union Value {
+	float f;
+	double d;
+	void * p;
+	int64_t i;
+};
+
+struct CallInfo {
+	ffi_cif cif;
+	cfunction func;
+	int nargs;
+	void ** valuePtrs;	//allocated upon creation, size nargs, points into valueData
+	Value * valueData;
+};
+
+void compile_globals(struct jit* jit, lua_State* L) {}
+
+static inline ffi_type * getFFITypeForCType(struct ctype const * mbr_ct) {
+	if (mbr_ct->pointers || mbr_ct->is_reference || mbr_ct->type == INTPTR_TYPE) {
+		return &ffi_type_pointer;
+	}
+	switch (mbr_ct->type) {
+	case FUNCTION_PTR_TYPE: return &ffi_type_pointer;
+	case ENUM_TYPE: return mbr_ct->is_unsigned ? &ffi_type_uint32 : &ffi_type_sint32;
+	case INT64_TYPE: return &ffi_type_sint64;
+	case COMPLEX_FLOAT_TYPE: return &ffi_type_complex_float;
+	case COMPLEX_DOUBLE_TYPE: return &ffi_type_complex_double;
+	case VOID_TYPE: return &ffi_type_void;
+	case BOOL_TYPE: return &ffi_type_int8;
+	case INT8_TYPE: return mbr_ct->is_unsigned ? &ffi_type_uint8 : &ffi_type_sint8;
+	case INT16_TYPE: return mbr_ct->is_unsigned ? &ffi_type_uint16 : &ffi_type_sint16;
+	case INT32_TYPE: return mbr_ct->is_unsigned ? &ffi_type_uint32 : &ffi_type_sint32;
+	case FLOAT_TYPE: return &ffi_type_float;
+	case DOUBLE_TYPE: return &ffi_type_double;
+	default:
+		luaL_error(L, "NYI: call return type");
+	}
+}
+
+/*
+ok i've completely lost track of what is what ...
+upvalues:
+#1: whatever ct_usr is (the first upvalue of cdata_call?)
+#2: CallInfo userdata
+*/
+static void call_ffi(lua_State *L) {
+	int ct_usr = lua_upvalueindex(1);
+
+#error TODO looks like I need to have the values[] point at the value itself, which I need to store somewhere else
+
+	// get closure arg #1 as the ffi_cif
+	CallInfo * callInfo = (CallInfo*)lua_touserdata(L, lua_upvalueindex(2));
+
+	// translate all the Lua args into FFI args
+	for (int i = 1; i <= callInfo->nargs; ++i) {
+        lua_rawgeti(L, ct_usr, i);
+        const struct ctype * mbr_ct = (const struct ctype*) lua_touserdata(L, -1);
+
+		if (mbr_ct->pointers || mbr_ct->is_reference || mbr_ct->type == INTPTR_TYPE) {
+			callInfo->valueData[i-1].i = cast_int64(L, i, 0);
+		} else {
+			switch (mbr_ct->type) {
+			case FUNCTION_PTR_TYPE:
+				callInfo->valueData[i-1].i = cast_int64(L, i, 0);
+				break;
+			case ENUM_TYPE:
+				if (mbr_ct->is_unsigned) {
+					callInfo->valueData[i-1].i = cast_uint32(L, i);
+				} else {
+					callInfo->valueData[i-1].i = cast_int32(L, i);
+				}
+				break;
+			case COMPLEX_FLOAT_TYPE:
+				callInfo->valueData[i-1].i = check_complex_float(L, i);
+				break;
+			case COMPLEX_DOUBLE_TYPE:
+				callInfo->valueData[i-1].i = check_complex_double(L, i);
+				break;
+			case BOOL_TYPE:
+				callInfo->valueData[i-1].i = (cast_int64(L, idx, !check_pointers) != 0);
+				break;
+			case INT8_TYPE:
+			case INT16_TYPE:
+			case INT32_TYPE:
+			case INT64_TYPE:
+				if (mbr_ct->is_unsigned) {
+					callInfo->valueData[i-1].i = cast_uint64(L, i, 0);
+				} else {
+					callInfo->valueData[i-1].i = cast_int64(L, i, 0);
+				}
+				break;
+			case FLOAT_TYPE:
+				callInfo->valueData[i-1].f = check_double(L, i);
+				break;
+			case DOUBLE_TYPE:
+				callInfo->valueData[i-1].d = check_double(L, i);
+				break;
+			default:
+				luaL_error(L, "NYI: call return type");
+			}
+		}
+
+		lua_pop(L, 1);
+	}
+
+	// do the call
+	void *ret = {};
+	ffi_call(callInfo->cif, callInfo->func, &ret, callInfo->valuePtrs);
+
+	// TODO translate the Lua result to C result
+}
+
+cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const struct ctype* ct) {
+	luaL_error(L, "TODO compile_callback");
+	return {};
+}
+
+void compile_function(lua_State* L, cfunction func, int ct_usr, const struct ctype* ct) {
+    int top = lua_gettop(L);
+    ct_usr = lua_absindex(L, ct_usr);
+
+	if (ct->calling_convention != C_CALL && ct->has_var_arg) {
+        luaL_error(L, "vararg is only allowed with the c calling convention");
+    }
+
+// what's this for?
+//    void * p = push_cdata(L, ct_usr, ct);
+//    *(cfunction*) p = func;
+
+	// fill out types
+    size_t nargs = lua_rawlen(L, ct_usr);
+	const int maxArgs = 256;
+	ffi_type * argFFITypes[maxArgs] = {NULL};
+	if (nargs > maxArgs) {
+		luaL_error(L, "function call has too many args: %d > %d\n", nargs, maxArgs);
+	}
+
+    for (int i = 1; i <= nargs; i++) {
+        lua_rawgeti(L, ct_usr, i);
+        const struct ctype * mbr_ct = (const struct ctype*) lua_touserdata(L, -1);
+		argFFITypes[i-1] = getFFITypeForCType(mbr_ct);
+		lua_pop(L, 1);
+	}
+
+	lua_rawgeti(L, ct_usr, 0);
+    const struct ctype * mbr_ct = (const struct ctype*) lua_touserdata(L, -1);
+    lua_pop(L, 1);
+
+	ffi_type * retFFIType = getFFITypeForCType(mbr_ct);
+
+	// push the ffi_cif
+	lua_pushvalue(L, ct_usr);
+	CallInfo * callinfo = (CallInfo*)lua_newuserdata(L, sizeof(CallInfo));
+	callInfo->func = func;
+	callInfo->nargs = nargs;
+	callInfo->valueData = (Value*)malloc(sizeof(Value) * nargs);
+	callInfo->valuePtrs = (void**)malloc(sizeof(void*) * nargs);
+	for (int i = 0; i < nargs; ++i) {
+		callInfo->valuePtrs[i] = callInfo->valueData + i;
+	}
+
+	ffi_status prepResult = ffi_prep_cif(&callInfo->cif, FFI_DEFAULT_ABI, nargs, retFFIType, argFFITypes);
+	if (prepResult != FFI_OK) {
+        luaL_error(L, "ffi_prep_cif failed with %d", prepResult);
+	}
+
+	// save it as a closure arg
+	// push the call_ffi function
+	lua_pushcclosure(L, call_ffi, 2);
+}
+
+#elif defined _WIN64
 #include "dynasm/dasm_x86.h"
 #include "call_x64win.h"
 #elif defined __amd64__

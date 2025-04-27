@@ -1494,9 +1494,15 @@ static int cdata_set(lua_State* L)
     return 0;
 }
 
+/*
+stack[1] is the check_cdata/cfunction object ...
+	... that a few lines later it calls "closures" ...
+	... cmodule_call says "ct_usr" ...
+upvalue[1] is a lua_CFunction ... of ...
+*/
 static int cdata_call(lua_State* L)
 {
-    struct ctype ct;
+	struct ctype ct;
     int top = lua_gettop(L);
     cfunction* p = (cfunction*) check_cdata(L, 1, &ct);
 
@@ -2576,7 +2582,7 @@ static int ctype_index(lua_State * L) {
     check_ctype(L, 1, &ct);
 
 	// taken from cdata_index
-    
+
 	assert(lua_gettop(L) == 3);
 	if (!push_user_mt(L, -1, &ct)) {
 		goto err;
@@ -2918,7 +2924,7 @@ static int cmodule_index(lua_State* L)
     lua_pushvalue(L, 2);
     lua_rawget(L, -2);
     if (!lua_isnil(L, -1)) {
-        return 1;
+		return 1;
     }
     lua_pop(L, 2);
 
@@ -3408,7 +3414,7 @@ static int setup_upvals(lua_State* L)
         /* add ffi.NULL */
         push_cdata(L, 0, &ct);
         lua_setfield(L, 1, "NULL");
-        
+
 		/* add ffi.null */
         push_cdata(L, 0, &ct);
         lua_setfield(L, 1, "null");

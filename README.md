@@ -4,13 +4,13 @@ Me picking up the facebook-archive luaffifb project.  Of all the lua-ffi project
 
 - `ffi.null` as well as `ffi.NULL`
 - ctype objects can now use their metatables' `__index` - just like in vanilla LuaJIT.
-- airthmetic on pointers doesn't call into the metatmethod - just like in vanilla LuaJIT.
+- arithmetic on pointers doesn't call into the metatmethod - just like in vanilla LuaJIT.
 
 # Changes still to make:
 
+- when targetting wasm, use libffi instead of dynasm for calling.  Ok at first I dismissed https://github.com/q66/cffi-lua and https://github.com/zhaojh329/lua-ffi for lacking key features that luaffifb had, but now I see the good side of using libffi over hacked in dynasm jit calls, and that is for wasm support.  so I haven't yet finished it but maybe I will look at these for inspiration.
 - why do I think `tonumber(ffi.new('int64_t', 0))` is serializing first and then parsing the string to a number?  Is there a better way to convert int64 boxed type to lua integer ...
 - indexing fields that aren't there should throw exceptions.  I hate it, but I'm staying true to LuaJIT.  or maybe I shouldn't, idk...
-
 
 <hr>
 
