@@ -221,7 +221,7 @@ struct jit {
 #define ALIGN_UP(PTR, MASK) \
   (( ((uintptr_t) (PTR)) + ((uintptr_t) (MASK)) ) & (~ ((uintptr_t) (MASK)) ))
 
-/* struct cdata/struct ctype */
+/* struct cdata/CType */
 
 #define PTR_ALIGN_MASK (sizeof(void*) - 1)
 #define FUNCTION_ALIGN_MASK (sizeof(void (*)()) - 1)
@@ -297,6 +297,9 @@ enum {
 #define IS_CHAR_UNSIGNED (((char) -1) > 0)
 #define IS_COMPLEX(type) ((type) == COMPLEX_FLOAT_TYPE || (type) == COMPLEX_DOUBLE_TYPE)
 
+// Welp here is a gaping weakness to the system ... you can only dereference 3 pointers deep.
+// libjpeg already breaks this.
+// And how come changing POINTER_BITS breaks things?  How come I bet someone's just using the shift operator with magic numbers somewhere in the code...
 #define POINTER_BITS 2
 #define POINTER_MAX ((1 << POINTER_BITS) - 1)
 
@@ -309,7 +312,7 @@ enum {
  * Since this is used as a header for every ctype and cdata, and we create a
  * ton of them on the stack, we try and minimise its size.
  */
-struct ctype {
+typedef struct CType {
     size_t base_size; /* size of the base type in bytes */
 
     union {
@@ -348,13 +351,25 @@ struct ctype {
     unsigned is_jitted : 1;
     unsigned is_packed : 1;
     unsigned is_unsigned : 1;
-};
+} CType;
+/*
+sizeof(ctype) = 32 ... sizeof'size_t' = 8 = 64 bits
+# bits is 25 + POINTER_BITS + (1 << POINTER_BITS)
+	n	1<<n	25+n+(1<<n)
+	1	2	28
+	2	4	31
+	3	8	36
+	4	16	45
+	5	32	62
+So I should be able to bump this up to 5 pointer dereference max without it changeing the sizeof() on 64bit systems
+But really ... WHYYYY are we using bitfields to STORE A RECURSIVE STRUCTURE.
+*/
 
 #ifdef _MSC_VER
 __declspec(align(16))
 #endif
 struct cdata {
-    struct ctype type
+    CType type
 #ifdef __GNUC__
       __attribute__ ((aligned(16)))
 #endif
@@ -406,28 +421,28 @@ static float cimagf(complex_float c) {
 
 #define CALLBACK_FUNC_USR_IDX 1
 
-void set_defined(lua_State* L, int ct_usr, struct ctype* ct);
-struct ctype* push_ctype(lua_State* L, int ct_usr, const struct ctype* ct);
-void* push_cdata(lua_State* L, int ct_usr, const struct ctype* ct); /* called from asm */
+void set_defined(lua_State* L, int ct_usr, CType* ct);
+CType* push_ctype(lua_State* L, int ct_usr, const CType* ct);
+void* push_cdata(lua_State* L, int ct_usr, const CType* ct); /* called from asm */
 void push_callback(lua_State* L, cfunction luafunc, cfunction cfunc);
-void check_ctype(lua_State* L, int idx, struct ctype* ct);
-void* to_cdata(lua_State* L, int idx, struct ctype* ct);
-void* check_cdata(lua_State* L, int idx, struct ctype* ct);
-size_t ctype_size(lua_State* L, const struct ctype* ct);
+void check_ctype(lua_State* L, int idx, CType* ct);
+void* to_cdata(lua_State* L, int idx, CType* ct);
+void* check_cdata(lua_State* L, int idx, CType* ct);
+size_t ctype_size(lua_State* L, const CType* ct);
 
-void parse_type(lua_State* L, struct parser* P, struct ctype* type);
-void parse_argument(lua_State* L, struct parser* P, int ct_usr, struct ctype* type, struct token* name, struct parser* asmname);
-void push_type_name(lua_State* L, int usr, const struct ctype* ct);
+void parse_type(lua_State* L, struct parser* P, CType* type);
+void parse_argument(lua_State* L, struct parser* P, int ct_usr, CType* type, struct token* name, struct parser* asmname);
+void push_type_name(lua_State* L, int usr, const CType* ct);
 
-int push_user_mt(lua_State* L, int ct_usr, const struct ctype* ct);
+int push_user_mt(lua_State* L, int ct_usr, const CType* ct);
 
 int ffi_cdef(lua_State* L);
 
 void push_func_ref(lua_State* L, cfunction func);
 void free_code(struct jit* jit, lua_State* L, cfunction func);
-int x86_return_size(lua_State* L, int usr, const struct ctype* ct);
-void compile_function(lua_State* L, cfunction f, int ct_usr, const struct ctype* ct);
-cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const struct ctype* ct);
+int x86_return_size(lua_State* L, int usr, const CType* ct);
+void compile_function(lua_State* L, cfunction f, int ct_usr, const CType* ct);
+cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct);
 void compile_globals(struct jit* jit, lua_State* L);
 int get_extern(struct jit* jit, uint8_t* addr, int idx, int type);
 
@@ -441,10 +456,10 @@ int64_t check_int64(lua_State* L, int idx);
 int32_t check_int32(lua_State* L, int idx);
 uint32_t check_uint32(lua_State* L, int idx);
 uintptr_t check_uintptr(lua_State* L, int idx);
-int32_t check_enum(lua_State* L, int idx, int to_usr, const struct ctype* tt);
+int32_t check_enum(lua_State* L, int idx, int to_usr, const CType* tt);
 /* these two will always push a value so that we can create structs/functions on the fly */
-void* check_typed_pointer(lua_State* L, int idx, int to_usr, const struct ctype* tt);
-cfunction check_typed_cfunction(lua_State* L, int idx, int to_usr, const struct ctype* tt);
+void* check_typed_pointer(lua_State* L, int idx, int to_usr, const CType* tt);
+cfunction check_typed_cfunction(lua_State* L, int idx, int to_usr, const CType* tt);
 complex_double check_complex_double(lua_State* L, int idx);
 complex_float check_complex_float(lua_State* L, int idx);
 

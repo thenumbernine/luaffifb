@@ -15,12 +15,17 @@ LUA=lua
 CFLAGS+= -I/usr/local/include/lua-5.4.7
 LDFLAGS+= -L/usr/local/lib/lua-5.4.7
 LDFLAGS+= -llua.5.4.7
+CFLAGS+= -fPIC
+
 # if it's Linux ...
 #LDFLAGS+= -shared
 # if OSX ...
-CFLAGS+= -fPIC
 #CFLAGS+= -Wall
 LDFLAGS+= -dynamiclib -undefined dynamic_lookup -flat_namespace
+
+#if it's debug
+#CFLAGS+= -O0 -gdwarf-2 -mfix-and-continue
+
 all: ffi.so
 	#luarocks make
 	# luarocks disagreed so...

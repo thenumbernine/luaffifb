@@ -58,7 +58,7 @@ struct CallInfo {
 
 void compile_globals(struct jit* jit, lua_State* L) {}
 
-static inline ffi_type * getFFITypeForCType(struct ctype const * mbr_ct) {
+static inline ffi_type * getFFITypeForCType(CType const * mbr_ct) {
 	if (mbr_ct->pointers || mbr_ct->is_reference || mbr_ct->type == INTPTR_TYPE) {
 		return &ffi_type_pointer;
 	}
@@ -97,7 +97,7 @@ static void call_ffi(lua_State *L) {
 	// translate all the Lua args into FFI args
 	for (int i = 1; i <= callInfo->nargs; ++i) {
         lua_rawgeti(L, ct_usr, i);
-        const struct ctype * mbr_ct = (const struct ctype*) lua_touserdata(L, -1);
+        const CType * mbr_ct = (const CType*) lua_touserdata(L, -1);
 
 		if (mbr_ct->pointers || mbr_ct->is_reference || mbr_ct->type == INTPTR_TYPE) {
 			callInfo->valueData[i-1].i = cast_int64(L, i, 0);
@@ -153,12 +153,12 @@ static void call_ffi(lua_State *L) {
 	// TODO translate the Lua result to C result
 }
 
-cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const struct ctype* ct) {
+cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct) {
 	luaL_error(L, "TODO compile_callback");
 	return {};
 }
 
-void compile_function(lua_State* L, cfunction func, int ct_usr, const struct ctype* ct) {
+void compile_function(lua_State* L, cfunction func, int ct_usr, const CType* ct) {
     int top = lua_gettop(L);
     ct_usr = lua_absindex(L, ct_usr);
 
@@ -180,13 +180,13 @@ void compile_function(lua_State* L, cfunction func, int ct_usr, const struct cty
 
     for (int i = 1; i <= nargs; i++) {
         lua_rawgeti(L, ct_usr, i);
-        const struct ctype * mbr_ct = (const struct ctype*) lua_touserdata(L, -1);
+        const CType * mbr_ct = (const CType*) lua_touserdata(L, -1);
 		argFFITypes[i-1] = getFFITypeForCType(mbr_ct);
 		lua_pop(L, 1);
 	}
 
 	lua_rawgeti(L, ct_usr, 0);
-    const struct ctype * mbr_ct = (const struct ctype*) lua_touserdata(L, -1);
+    const CType * mbr_ct = (const CType*) lua_touserdata(L, -1);
     lua_pop(L, 1);
 
 	ffi_type * retFFIType = getFFITypeForCType(mbr_ct);

@@ -241,17 +241,17 @@ void compile_globals(struct jit* jit, lua_State* L)
     compile(Dst, L, NULL, LUA_NOREF);
 }
 
-int x86_return_size(lua_State* L, int usr, const struct ctype* ct)
+int x86_return_size(lua_State* L, int usr, const CType* ct)
 {
     int ret = 0;
-    const struct ctype* mt;
+    const CType* mt;
 
     if (ct->calling_convention != C_CALL) {
         size_t i;
         size_t argn = lua_rawlen(L, usr);
         for (i = 1; i <= argn; i++) {
             lua_rawgeti(L, usr, (int) i);
-            mt = (const struct ctype*) lua_touserdata(L, -1);
+            mt = (const CType*) lua_touserdata(L, -1);
 
             if (mt->pointers || mt->is_reference) {
                 ret += sizeof(void*);
@@ -290,7 +290,7 @@ int x86_return_size(lua_State* L, int usr, const struct ctype* ct)
 
 #if !defined _WIN64 && !defined __amd64__
     lua_rawgeti(L, usr, 0);
-    mt = (const struct ctype*) lua_touserdata(L, -1);
+    mt = (const CType*) lua_touserdata(L, -1);
     if (!mt->pointers && !mt->is_reference && mt->type == COMPLEX_DOUBLE_TYPE) {
         ret += sizeof(void*);
     }
@@ -341,7 +341,7 @@ struct reg_alloc {
  * We use the same register allocation logic as posix x64 with 2 int regs and 0 float regs
  */
 
-static void get_int(Dst_DECL, const struct ctype* ct, struct reg_alloc* reg, int is_int64)
+static void get_int(Dst_DECL, const CType* ct, struct reg_alloc* reg, int is_int64)
 {
     /* grab the register from the shadow space */
 #ifdef _WIN64
@@ -374,7 +374,7 @@ static void get_int(Dst_DECL, const struct ctype* ct, struct reg_alloc* reg, int
     }
 }
 
-static void add_int(Dst_DECL, const struct ctype* ct, struct reg_alloc* reg, int is_int64)
+static void add_int(Dst_DECL, const CType* ct, struct reg_alloc* reg, int is_int64)
 {
 #ifdef _WIN64
     if (reg->regs < MAX_REGISTERS(ct)) {
@@ -408,7 +408,7 @@ static void add_int(Dst_DECL, const struct ctype* ct, struct reg_alloc* reg, int
     }
 }
 
-static void get_float(Dst_DECL, const struct ctype* ct, struct reg_alloc* reg, int is_double)
+static void get_float(Dst_DECL, const CType* ct, struct reg_alloc* reg, int is_double)
 {
 #if !defined _WIN64 && !defined __amd64__
     assert(MAX_FLOAT_REGISTERS(ct) == 0);
@@ -446,7 +446,7 @@ static void get_float(Dst_DECL, const struct ctype* ct, struct reg_alloc* reg, i
 #endif
 }
 
-static void add_float(Dst_DECL, const struct ctype* ct, struct reg_alloc* reg, int is_double)
+static void add_float(Dst_DECL, const CType* ct, struct reg_alloc* reg, int is_double)
 {
 #if !defined _WIN64 && !defined __amd64__
     assert(MAX_FLOAT_REGISTERS(ct) == 0);
@@ -497,12 +497,12 @@ static void add_float(Dst_DECL, const struct ctype* ct, struct reg_alloc* reg, i
 #define get_pointer(jit, ct, reg) get_int(jit, ct, reg, 0)
 #endif
 
-cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const struct ctype* ct)
+cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 {
     int i, nargs;
     cfunction* pf;
-    struct ctype ct2 = *ct;
-    const struct ctype* mt;
+    CType ct2 = *ct;
+    const CType* mt;
     struct reg_alloc reg;
     int num_upvals = 0;
     int top = lua_gettop(L);
@@ -557,7 +557,7 @@ cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const struct ctyp
 
 #if !defined _WIN64 && !defined __amd64__
     lua_rawgeti(L, ct_usr, 0);
-    mt = (const struct ctype*) lua_touserdata(L, -1);
+    mt = (const CType*) lua_touserdata(L, -1);
     if (!mt->pointers && !mt->is_reference && mt->type == COMPLEX_DOUBLE_TYPE) {
         hidden_arg_off = reg.off;
         reg.off += sizeof(void*);
@@ -569,7 +569,7 @@ cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const struct ctyp
 
     for (i = 1; i <= nargs; i++) {
         lua_rawgeti(L, ct_usr, i);
-        mt = (const struct ctype*) lua_touserdata(L, -1);
+        mt = (const CType*) lua_touserdata(L, -1);
 
         if (mt->pointers || mt->is_reference) {
             lua_getuservalue(L, -1);
@@ -682,7 +682,7 @@ cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const struct ctyp
     }
 
     lua_rawgeti(L, ct_usr, 0);
-    mt = (const struct ctype*) lua_touserdata(L, -1);
+    mt = (const CType*) lua_touserdata(L, -1);
 
     dasm_put(Dst, 362, (unsigned int)((uintptr_t)(0)), (unsigned int)(((uintptr_t)(0))>>32), (mt->pointers || mt->is_reference || mt->type != VOID_TYPE) ? 1 : 0, nargs);
 
@@ -795,11 +795,11 @@ cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const struct ctyp
     return *pf;
 }
 
-void compile_function(lua_State* L, cfunction func, int ct_usr, const struct ctype* ct)
+void compile_function(lua_State* L, cfunction func, int ct_usr, const CType* ct)
 {
     size_t i, nargs;
     int num_upvals;
-    const struct ctype* mbr_ct;
+    const CType* mbr_ct;
     struct jit* Dst = get_jit(L);
     struct reg_alloc reg;
     void* p;
@@ -840,7 +840,7 @@ void compile_function(lua_State* L, cfunction func, int ct_usr, const struct cty
     /* Returned complex doubles require a hidden first parameter where the
      * data is stored, which is popped by the calling code. */
     lua_rawgeti(L, ct_usr, 0);
-    mbr_ct = (const struct ctype*) lua_touserdata(L, -1);
+    mbr_ct = (const CType*) lua_touserdata(L, -1);
     if (!mbr_ct->pointers && !mbr_ct->is_reference && mbr_ct->type == COMPLEX_DOUBLE_TYPE) {
         /* we can allocate more space for arguments as long as no add_*
          * function has been called yet, mbr_ct will be added as an upvalue in
@@ -853,7 +853,7 @@ void compile_function(lua_State* L, cfunction func, int ct_usr, const struct cty
 
     for (i = 1; i <= nargs; i++) {
         lua_rawgeti(L, ct_usr, (int) i);
-        mbr_ct = (const struct ctype*) lua_touserdata(L, -1);
+        mbr_ct = (const CType*) lua_touserdata(L, -1);
 
         if (mbr_ct->pointers || mbr_ct->is_reference) {
             lua_getuservalue(L, -1);
@@ -1111,7 +1111,7 @@ void compile_function(lua_State* L, cfunction func, int ct_usr, const struct cty
      */
 
     lua_rawgeti(L, ct_usr, 0);
-    mbr_ct = (const struct ctype*) lua_touserdata(L, -1);
+    mbr_ct = (const CType*) lua_touserdata(L, -1);
 
     if (mbr_ct->pointers || mbr_ct->is_reference || mbr_ct->type == INTPTR_TYPE) {
         lua_getuservalue(L, -1);

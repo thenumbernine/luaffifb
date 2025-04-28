@@ -627,11 +627,11 @@ void compile_globals(struct jit* jit, lua_State* L)
     (void) jit;
 }
 
-cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const struct ctype* ct)
+cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 {
     struct jit* Dst = get_jit(L);;
     int i, nargs, num_upvals, ref;
-    const struct ctype* mt;
+    const CType* mt;
 
     int top = lua_gettop(L);
 
@@ -660,7 +660,7 @@ cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const struct ctyp
 
     for (i = 1; i <= nargs; i++) {
         lua_rawgeti(L, ct_usr, i);
-        mt = (const struct ctype*) lua_touserdata(L, -1);
+        mt = (const CType*) lua_touserdata(L, -1);
 
         if (mt->pointers || mt->is_reference) {
             lua_getuservalue(L, -1);
@@ -731,7 +731,7 @@ cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const struct ctyp
     }
 
     lua_rawgeti(L, ct_usr, 0);
-    mt = (const struct ctype*) lua_touserdata(L, -1);
+    mt = (const CType*) lua_touserdata(L, -1);
 
     dasm_put(Dst, 129, ((mt->pointers || mt->is_reference || mt->type != VOID_TYPE) ? 1 : 0), nargs);
 
@@ -811,7 +811,7 @@ cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const struct ctyp
 
     {
         void* p;
-        struct ctype ft;
+        CType ft;
         cfunction func;
 
         func = compile(Dst, L, NULL, ref);
@@ -827,11 +827,11 @@ cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const struct ctyp
     }
 }
 
-void compile_function(lua_State* L, cfunction func, int ct_usr, const struct ctype* ct)
+void compile_function(lua_State* L, cfunction func, int ct_usr, const CType* ct)
 {
     struct jit* Dst = get_jit(L);;
     int i, nargs, num_upvals;
-    const struct ctype* mt;
+    const CType* mt;
     void* p;
 
     int top = lua_gettop(L);
@@ -859,7 +859,7 @@ void compile_function(lua_State* L, cfunction func, int ct_usr, const struct cty
 
     for (i = 1; i <= nargs; i++) {
         lua_rawgeti(L, ct_usr, i);
-        mt = (const struct ctype*) lua_touserdata(L, -1);
+        mt = (const CType*) lua_touserdata(L, -1);
 
         if (mt->pointers || mt->is_reference || mt->type == FUNCTION_PTR_TYPE || mt->type == ENUM_TYPE) {
             lua_getuservalue(L, -1);
@@ -949,7 +949,7 @@ void compile_function(lua_State* L, cfunction func, int ct_usr, const struct cty
 
 
     lua_rawgeti(L, ct_usr, 0);
-    mt = (const struct ctype*) lua_touserdata(L, -1);
+    mt = (const CType*) lua_touserdata(L, -1);
 
     if (mt->pointers || mt->is_reference) {
         lua_getuservalue(L, -1);

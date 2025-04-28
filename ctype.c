@@ -55,8 +55,7 @@ static void update_on_definition(
 	lua_pop(L, 1);									// stack: ...
 }
 
-void set_defined(lua_State* L, int ct_usr, struct ctype* ct)
-{
+void set_defined(lua_State* L, int ct_usr, CType* ct) {
 	ct_usr = lua_absindex(L, ct_usr);
 
 	ct->is_defined = 1;
@@ -69,7 +68,7 @@ void set_defined(lua_State* L, int ct_usr, struct ctype* ct)
 		lua_pushnil(L);
 
 		while (lua_next(L, -2)) {
-			struct ctype* upd = (struct ctype*) lua_touserdata(L, -2);
+			CType* upd = (CType*) lua_touserdata(L, -2);
 			upd->base_size = ct->base_size;
 			upd->align_mask = ct->align_mask;
 			upd->is_defined = 1;
@@ -90,21 +89,21 @@ void set_defined(lua_State* L, int ct_usr, struct ctype* ct)
 }
 
 /*
-Creates a new `struct ctype` userdata, 
+Creates a new `CType` userdata, 
 Copies its contents from `ct`,
 Sets its metatable to registry[ctype_mt_key],
 If `ct_usr` is nonzero then assigns it's 0th uservalue to `stack[ct_usr]`
 - calling from push_builtin, for IS_COMPLEX(type), this is a {}, otherwise it is nil
 */
-struct ctype* push_ctype(
+CType* push_ctype(
 	lua_State* L,
 	int ct_usr,
-	const struct ctype* ct
+	const CType* ct
 ) {										// stack: ...
 	ct_usr = lua_absindex(L, ct_usr);
 
-	struct ctype * ret = (struct ctype *)lua_newuserdata(L, sizeof(struct ctype));
-	*ret = *ct;							// stack: ..., u = userdata of struct ctype
+	CType * ret = (CType *)lua_newuserdata(L, sizeof(CType));
+	*ret = *ct;							// stack: ..., u = userdata of CType
 
 	pushRegistry(L, &ctype_mt_key);		// stack: ..., u, registry[ctype_mt_key]
 	lua_setmetatable(L, -2);			// stack: ..., u;  setmetatable(u, registry[ctype_mt_key])
@@ -130,7 +129,7 @@ struct ctype* push_ctype(
 	return ret;							// stack: ..., u
 }
 
-size_t ctype_size(lua_State* L, const struct ctype* ct) {
+size_t ctype_size(lua_State* L, const CType* ct) {
 	if (ct->pointers - ct->is_array) {
 		return sizeof(void*) * (ct->is_array ? ct->array_size : 1);
 
@@ -159,7 +158,7 @@ Returns the pointer past the cdata to hold the cdata's contents.
 void * push_cdata(
 	lua_State* L,
 	int ct_usr,
-	const struct ctype* ct
+	const CType* ct
 ) {										// stack: ...
 	ct_usr = lua_absindex(L, ct_usr);
 
@@ -228,12 +227,12 @@ Writes the ctype to `ct`.
 Pushes the ctype's uservalue 0 onto the stack ...
 ... for ctype, this is some weird arg, either {} for complex or nil
 ... for cdata, what is this?
-And how come it's casting cdata_mt_key's as struct ctype?
+And how come it's casting cdata_mt_key's as CType?
 */
 void check_ctype(
 	lua_State* L,
 	int idx,
-	struct ctype * ct	// out
+	CType * ct	// out
 ) {											// stack: ...
 	if (lua_isstring(L, idx)) {
 		struct parser P;
@@ -254,7 +253,7 @@ void check_ctype(
 	) {													// stack: ..., getmetatable(stack[idx])
 		lua_pop(L, 1); 									// stack: ... 
 		// wait ... if it's a cdata ... then treat its userdata as a struct type ... why?
-		*ct = *(struct ctype*)lua_touserdata(L, idx);	// stack: ...
+		*ct = *(CType*)lua_touserdata(L, idx);	// stack: ...
 		lua_getuservalue(L, idx);						// stack: ..., stack[idx]'s usrvalue 0
 		return;
 	}
@@ -267,11 +266,11 @@ to_cdata returns the struct cdata* and pushes the user value onto the stack.
 If the index is not a ctype then ct is set to the zero value such
 that ct->type is INVALID_TYPE, a nil is pushed, and NULL is returned.
 */
-void * to_cdata(lua_State* L, int idx, struct ctype* ct) {
+void * to_cdata(lua_State* L, int idx, CType* ct) {
 													// stack: ...
 	// If we always returned cd+1 instead of dereferencing it for references, pointers, and arrays,
 	// then the result of NULL can determine non-cdata, and this memset can be skipped for non-cdata values.
-	memset(ct, 0, sizeof(struct ctype));
+	memset(ct, 0, sizeof(CType));
 	if (!lua_isuserdata(L, idx) || !lua_getmetatable(L, idx)) {
 		lua_pushnil(L);								// stack: ..., nil
 		return NULL;
@@ -304,7 +303,7 @@ Also dereferences references.
 void * check_cdata(
 	lua_State * L,
 	int idx,
-	struct ctype * ct
+	CType * ct
 ) {											// stack: ...
 	void * p = to_cdata(L, idx, ct);		// stack: ..., stack[idx]'s uservalue 0 if it is a cdata, nil otherwise
 	if (ct->type == INVALID_TYPE) {

@@ -259,7 +259,7 @@ enum test {TEST};
 /* Parses an enum definition from after the open curly through to the close
  * curly. Expects the user table to be on the top of the stack
  */
-static int parse_enum(lua_State* L, struct parser* P, struct ctype* type)
+static int parse_enum(lua_State* L, struct parser* P, CType* type)
 {
 	struct token tok;
 	int value = -1;
@@ -320,7 +320,7 @@ static int parse_enum(lua_State* L, struct parser* P, struct ctype* type)
 	return 0;
 }
 
-static void calculate_member_position(lua_State* L, struct parser* P, struct ctype* ct, struct ctype* mt, int* pbit_offset, int* pbitfield_type)
+static void calculate_member_position(lua_State* L, struct parser* P, CType* ct, CType* mt, int* pbit_offset, int* pbitfield_type)
 {
 	int bit_offset = *pbit_offset;
 
@@ -481,9 +481,9 @@ static void calculate_member_position(lua_State* L, struct parser* P, struct cty
 	*pbit_offset = bit_offset;
 }
 
-static int copy_submembers(lua_State* L, int to_usr, int from_usr, const struct ctype* ft, int* midx)
+static int copy_submembers(lua_State* L, int to_usr, int from_usr, const CType* ft, int* midx)
 {
-	struct ctype ct;
+	CType ct;
 	int i, sublen;
 
 	from_usr = lua_absindex(L, from_usr);
@@ -494,7 +494,7 @@ static int copy_submembers(lua_State* L, int to_usr, int from_usr, const struct 
 	for (i = 1; i <= sublen; i++) {
 		lua_rawgeti(L, from_usr, i);
 
-		ct = *(const struct ctype*) lua_touserdata(L, -1);
+		ct = *(const CType*) lua_touserdata(L, -1);
 		ct.offset += ft->offset;
 		lua_getuservalue(L, -1);
 
@@ -508,7 +508,7 @@ static int copy_submembers(lua_State* L, int to_usr, int from_usr, const struct 
 	lua_pushnil(L);
 	while (lua_next(L, from_usr)) {
 		if (lua_type(L, -2) == LUA_TSTRING) {
-			struct ctype ct = *(const struct ctype*) lua_touserdata(L, -1);
+			CType ct = *(const CType*) lua_touserdata(L, -1);
 			ct.offset += ft->offset;
 			lua_getuservalue(L, -1);
 
@@ -525,7 +525,7 @@ static int copy_submembers(lua_State* L, int to_usr, int from_usr, const struct 
 	return 0;
 }
 
-static int add_member(lua_State* L, int ct_usr, int mname, int mbr_usr, const struct ctype* mt, int* midx)
+static int add_member(lua_State* L, int ct_usr, int mname, int mbr_usr, const CType* mt, int* midx)
 {
 	ct_usr = lua_absindex(L, ct_usr);
 	mname = lua_absindex(L, mname);
@@ -553,7 +553,7 @@ static int add_member(lua_State* L, int ct_usr, int mname, int mbr_usr, const st
 
 /* Parses a struct from after the open curly through to the close curly.
  */
-static int parse_struct(lua_State* L, struct parser* P, int tmp_usr, const struct ctype* ct)
+static int parse_struct(lua_State* L, struct parser* P, int tmp_usr, const CType* ct)
 {
 	struct token tok;
 	int midx = 1;
@@ -563,7 +563,7 @@ static int parse_struct(lua_State* L, struct parser* P, int tmp_usr, const struc
 
 	/* parse members */
 	for (;;) {
-		struct ctype mbase;
+		CType mbase;
 
 		assert(lua_gettop(L) == top);
 
@@ -589,7 +589,7 @@ static int parse_struct(lua_State* L, struct parser* P, int tmp_usr, const struc
 
 		for (;;) {
 			struct token mname;
-			struct ctype mt = mbase;
+			CType mt = mbase;
 
 			memset(&mname, 0, sizeof(mname));
 
@@ -634,7 +634,7 @@ static int parse_struct(lua_State* L, struct parser* P, int tmp_usr, const struc
 	return 0;
 }
 
-static int calculate_struct_offsets(lua_State* L, struct parser* P, int ct_usr, struct ctype* ct, int tmp_usr)
+static int calculate_struct_offsets(lua_State* L, struct parser* P, int ct_usr, CType* ct, int tmp_usr)
 {
 	int i;
 	int midx = 1;
@@ -646,11 +646,11 @@ static int calculate_struct_offsets(lua_State* L, struct parser* P, int ct_usr, 
 	tmp_usr = lua_absindex(L, tmp_usr);
 
 	for (i = 1; i <= sz; i++) {
-		struct ctype mt;
+		CType mt;
 
 		/* get the member type */
 		lua_rawgeti(L, tmp_usr, i);
-		mt = *(const struct ctype*) lua_touserdata(L, -1);
+		mt = *(const CType*) lua_touserdata(L, -1);
 
 		/* get the member user table */
 		lua_getuservalue(L, -1);
@@ -694,9 +694,9 @@ static int calculate_struct_offsets(lua_State* L, struct parser* P, int ct_usr, 
 
 /* copy over attributes that could be specified before the typedef eg
  * __attribute__(packed) const type_t */
-static void instantiate_typedef(struct parser* P, struct ctype* tt, const struct ctype* ft)
+static void instantiate_typedef(struct parser* P, CType* tt, const CType* ft)
 {
-	struct ctype pt = *tt;
+	CType pt = *tt;
 	*tt = *ft;
 
 	tt->const_mask |= pt.const_mask;
@@ -717,7 +717,7 @@ static void instantiate_typedef(struct parser* P, struct ctype* tt, const struct
  * name before the opening brace
  * leaves the type usr value on the stack
  */
-static int parse_record(lua_State* L, struct parser* P, struct ctype* ct)
+static int parse_record(lua_State* L, struct parser* P, CType* ct)
 {
 	struct token tok;
 	int top = lua_gettop(L);
@@ -758,7 +758,7 @@ static int parse_record(lua_State* L, struct parser* P, struct ctype* ct)
 
 		} else {
 			/* get the exsting declared type */
-			const struct ctype* prevt = (const struct ctype*) lua_touserdata(L, top+3);
+			const CType* prevt = (const CType*) lua_touserdata(L, top+3);
 
 			if (prevt->type != ct->type) {
 				lua_getuservalue(L, top+3);
@@ -998,7 +998,7 @@ static int parse_type_name(
  * more following it) or 0 if not. If the token was used, the next token must
  * be retrieved using next_token/require_token.
  */
-static int parse_attribute(lua_State* L, struct parser* P, struct token* tok, struct ctype* ct, struct parser* asmname)
+static int parse_attribute(lua_State* L, struct parser* P, struct token* tok, CType* ct, struct parser* asmname)
 {
 	if (tok->type != TOK_TOKEN) {
 		return 0;
@@ -1186,7 +1186,7 @@ Leaves the uservalue 0 of the ctype userdata on the stack.
 void parse_type(
 	lua_State * L,
 	struct parser * P,
-	struct ctype * ct	// out
+	CType * ct	// out
 ) {								// stack: ...
 	int top = lua_gettop(L);
 
@@ -1250,7 +1250,7 @@ void parse_type(
 			return;
 		}
 
-		instantiate_typedef(P, ct, (const struct ctype*) lua_touserdata(L, -1));
+		instantiate_typedef(P, ct, (const CType*) lua_touserdata(L, -1));
 
 		// we only want the uservalue from the ctype
 		lua_getuservalue(L, -1);			// stack: ..., ctype, ctype uservalue 0
@@ -1280,7 +1280,7 @@ enum name_type {
 	BACK,
 };
 
-static void append_type_name(luaL_Buffer* B, int usr, const struct ctype* ct, enum name_type type)
+static void append_type_name(luaL_Buffer* B, int usr, const CType* ct, enum name_type type)
 {
 	size_t i;
 	lua_State* L = B->L;
@@ -1406,7 +1406,7 @@ static void append_type_name(luaL_Buffer* B, int usr, const struct ctype* ct, en
 	}
 }
 
-void push_type_name(lua_State* L, int usr, const struct ctype* ct)
+void push_type_name(lua_State* L, int usr, const CType* ct)
 {
 	luaL_Buffer B;
 	usr = lua_absindex(L, usr);
@@ -1415,12 +1415,12 @@ void push_type_name(lua_State* L, int usr, const struct ctype* ct)
 	luaL_pushresult(&B);
 }
 
-static void push_function_type_strings(lua_State* L, int usr, const struct ctype* ct)
+static void push_function_type_strings(lua_State* L, int usr, const CType* ct)
 {
 	size_t i, args;
 	luaL_Buffer B;
 	int top = lua_gettop(L);
-	const struct ctype* ret_ct;
+	const CType* ret_ct;
 
 	int arg_ct = top+3;
 	int arg_usr = top+4;
@@ -1432,7 +1432,7 @@ static void push_function_type_strings(lua_State* L, int usr, const struct ctype
 	lua_settop(L, top+4); /* room for two returns and two temp positions */
 	lua_rawgeti(L, usr, 0);
 	lua_getuservalue(L, -1);
-	ret_ct = (const struct ctype*) lua_touserdata(L, -2);
+	ret_ct = (const CType*) lua_touserdata(L, -2);
 
 	luaL_buffinit(L, &B);
 	append_type_name(&B, ret_usr, ret_ct, FRONT);
@@ -1475,7 +1475,7 @@ static void push_function_type_strings(lua_State* L, int usr, const struct ctype
 		lua_replace(L, arg_ct);
 		lua_getuservalue(L, arg_ct);
 		lua_replace(L, arg_usr);
-		append_type_name(&B, arg_usr, (const struct ctype*) lua_touserdata(L, arg_ct), BOTH);
+		append_type_name(&B, arg_usr, (const CType*) lua_touserdata(L, arg_ct), BOTH);
 	}
 
 	luaL_addstring(&B, ")");
@@ -1488,7 +1488,7 @@ static void push_function_type_strings(lua_State* L, int usr, const struct ctype
 }
 
 /* parses from after the opening paranthesis to after the closing parenthesis */
-static void parse_function_arguments(lua_State* L, struct parser* P, int ct_usr, struct ctype* ct)
+static void parse_function_arguments(lua_State* L, struct parser* P, int ct_usr, CType* ct)
 {
 	struct token tok;
 	int args = 0;
@@ -1517,7 +1517,7 @@ static void parse_function_arguments(lua_State* L, struct parser* P, int ct_usr,
 			break;
 
 		} else if (tok.type == TOK_TOKEN) {
-			struct ctype at;
+			CType at;
 
 			put_back(P);
 			parse_type(L, P, &at);
@@ -1571,7 +1571,7 @@ static int max_bitfield_size(int type)
 	}
 }
 
-static struct ctype* parse_argument2(lua_State* L, struct parser* P, int ct_usr, struct ctype* ct, struct token* name, struct parser* asmname);
+static CType* parse_argument2(lua_State* L, struct parser* P, int ct_usr, CType* ct, struct token* name, struct parser* asmname);
 
 /* parses from after the first ( in a function declaration or function pointer
  * can be one of:
@@ -1579,7 +1579,7 @@ static struct ctype* parse_argument2(lua_State* L, struct parser* P, int ct_usr,
  * void (foo)(...) before foo
  * void (* <>)(...) before <> which is the inner type
  */
-static struct ctype* parse_function(lua_State* L, struct parser* P, int ct_usr, struct ctype* ct, struct token* name, struct parser* asmname)
+static CType* parse_function(lua_State* L, struct parser* P, int ct_usr, CType* ct, struct token* name, struct parser* asmname)
 {
 	/* We have a function pointer or a function. The usr table will
 	 * get replaced by the canonical one (if there is one) in
@@ -1587,7 +1587,7 @@ static struct ctype* parse_function(lua_State* L, struct parser* P, int ct_usr, 
 	 * been parsed. */
 	struct token tok;
 	int top = lua_gettop(L);
-	struct ctype* ret;
+	CType* ret;
 
 	lua_newtable(L);
 	ret = push_ctype(L, ct_usr, ct);
@@ -1659,11 +1659,11 @@ If the ft_usr is nonzero (which happens when we parse a '(' ... ) then ...
 ... the new top (+1 the old top) is the value of ft_usr
 ... the lua value at the new top is either a table or nil
 */
-static struct ctype* parse_argument2(
+static CType* parse_argument2(
 	lua_State* L,
 	struct parser* P,
 	int ct_usr,
-	struct ctype* ct,
+	CType* ct,
 	struct token* name,
 	struct parser* asmname
 ) {
@@ -1781,7 +1781,7 @@ You cannot undocument things any better than leaving them as an unnamed, indexed
 static void find_canonical_usr(
 	lua_State* L,
 	int ct_usr,
-	const struct ctype *ct
+	const CType *ct
 ) {
 	int top = lua_gettop(L);
 
@@ -1806,7 +1806,7 @@ static void find_canonical_usr(
 
 	// first canonize the return type
 	lua_rawgeti(L, ct_usr, 0);
-	struct ctype rt = *(struct ctype*) lua_touserdata(L, -1);
+	CType rt = *(CType*) lua_touserdata(L, -1);
 	lua_getuservalue(L, -1);
 	find_canonical_usr(L, -1, &rt);
 	push_ctype(L, -1, &rt);
@@ -1870,7 +1870,7 @@ void parse_argument(
 	lua_State * L,
 	struct parser * P,
 	int ct_usr,
-	struct ctype * ct,
+	CType * ct,
 	struct token * pname,
 	struct parser * asmname
 ) {
@@ -1906,12 +1906,12 @@ void parse_argument(
 static void parse_typedef(lua_State* L, struct parser* P) {
 	int top = lua_gettop(L);
 
-	struct ctype base_type;
+	CType base_type;
 	parse_type(L, P, &base_type);
 
 	struct token tok;
 	for (;;) {
-		struct ctype arg_type = base_type;
+		CType arg_type = base_type;
 		struct token name;
 
 		memset(&name, 0, sizeof(name));
@@ -2042,7 +2042,7 @@ static void push_strings(lua_State* L, struct parser* P)
 
 static void parse_constant_assignemnt(lua_State* L,
 									  struct parser* P,
-									  const struct ctype* type,
+									  const CType* type,
 									  const struct token* name)
 {
 	int64_t val = calculate_constant(L, P);
@@ -2147,7 +2147,7 @@ static int parse_root(lua_State* L, struct parser* P)
 
 		} else {
 			/* type declaration, type definition, or function declaration */
-			struct ctype type;
+			CType type;
 			struct token name;
 			struct parser asmname;
 
@@ -2285,7 +2285,7 @@ static int64_t string_to_int(const char* str, size_t size)
 static int try_cast(lua_State* L)
 {
 	struct parser* P = (struct parser*) lua_touserdata(L, 1);
-	struct ctype ct;
+	CType ct;
 	struct token name, tok;
 	memset(&name, 0, sizeof(name));
 
@@ -2394,7 +2394,7 @@ static int64_t calculate_constant2(lua_State* L, struct parser* P, struct token*
 			 || IS_LITERAL(*tok, "__alignof"))) {
 
 		bool issize = IS_LITERAL(*tok, "sizeof");
-		struct ctype type;
+		CType type;
 
 		require_token(L, P, tok);
 		if (tok->type != TOK_OPEN_PAREN) {
