@@ -30,7 +30,7 @@ all: ffi.so
 	#luarocks make
 	# luarocks disagreed so...
 
-SRCS= call.c ctype.c ffi.c parser.c ffi_complex.c
+SRCS= call.c ctype.c ffi.c parser.c ffi_complex.c lua.c
 OBJS= $(patsubst %.c, %.o, $(SRCS))
 
 ffi.so: $(OBJS)

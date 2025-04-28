@@ -19,19 +19,7 @@
 #include <string.h>
 #include <assert.h>
 
-#ifdef __cplusplus
-extern "C" {
-# include <lua.h>
-# include <lauxlib.h>
-# include <lualib.h>
-}
-# define EXTERN_C extern "C"
-#else
-# include <lua.h>
-# include <lauxlib.h>
-# include <lualib.h>
-# define EXTERN_C extern
-#endif
+#include "lua.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -65,44 +53,6 @@ struct jit;
 #endif
 
 EXTERN_C EXPORT int luaopen_ffi(lua_State* L);
-
-int lua_absindex2(lua_State* L, int idx);
-// use our own version of lua_absindex such that lua_absindex(L, 0) == 0
-#define lua_absindex(L, idx) lua_absindex2(L, idx)
-
-#if LUA_VERSION_NUM == 501
-inline void lua_callk(lua_State *L, int nargs, int nresults, int ctx, lua_CFunction k) {
-	lua_call(L, nargs, nresults);
-}
-/*
-** set functions from list 'l' into table at top - 'nup'; each
-** function gets the 'nup' elements at the top as upvalues.
-** Returns with only the table at the stack.
-*/
-inline void luaL_setfuncs (lua_State *L, const luaL_Reg *l, int nup) {
-  luaL_checkstack(L, nup, "too many upvalues");
-  for (; l && l->name; l++) {  /* fill the table with given functions */
-	int i;
-	for (i = 0; i < nup; i++)  /* copy upvalues to the top */
-	  lua_pushvalue(L, -nup);
-	lua_pushcclosure(L, l->func, nup);  /* closure with those upvalues */
-	lua_setfield(L, -(nup + 2), l->name);
-  }
-  lua_pop(L, nup);  /* remove upvalues */
-}
-#define lua_setuservalue lua_setfenv
-#define lua_getuservalue lua_getfenv
-#define lua_rawlen lua_objlen
-inline char* luaL_prepbuffsize(luaL_Buffer* B, size_t sz) {
-	if (sz > LUAL_BUFFERSIZE) {
-		luaL_error(B->L, "string too long");
-	}
-	return luaL_prepbuffer(B);
-}
-#endif
-#if LUA_VERSION_NUM >= 503
-void (lua_remove)(lua_State *L, int idx);
-#endif
 
 // architectures
 #if defined _WIN32 && defined UNDER_CE

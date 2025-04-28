@@ -14,7 +14,7 @@
 #include <math.h>
 #include <inttypes.h>
 
-/* Set to 1 to get extra debugging on print */
+// Set to 1 to get extra debugging on print 
 #define DEBUG_TOSTRING 0
 
 int jit_key;
@@ -31,19 +31,6 @@ int abi_key;
 int next_unnamed_key;
 int niluv_key;
 int asmname_key;
-
-
-int lua_absindex2(lua_State* L, int idx) {
-	return (LUA_REGISTRYINDEX <= idx && idx < 0)
-		 ? lua_gettop(L) + idx + 1
-		 : idx;
-}
-
-#if LUA_VERSION_NUM >= 503
-void (lua_remove)(lua_State *L, int idx) {
-	lua_remove(L, idx);
-}
-#endif
 
 /*
 Sets stack[tableLoc][key] = boolean(value)
@@ -1216,7 +1203,7 @@ static void setmintop(lua_State* L, int idx)
 	}
 }
 
-/* warning: in the case that it finds an array size, it removes that index */
+// warning: in the case that it finds an array size, it removes that index 
 static void get_variable_array_size(lua_State* L, int idx, CType* ct)
 {
 	/* we only care about the variable buisness for the variable array
@@ -2370,7 +2357,7 @@ static int cdata_sub(lua_State* L)
 	}
 }
 
-/* TODO fix for unsigned */
+// TODO fix for unsigned 
 #define NUMBER_ONLY_BINOP(OPSTR, DO_NORMAL, DO_COMPLEX)	                 \
 	CType lt, rt, ct;                                                \
 	void *lp, *rp;                                                          \
@@ -2962,7 +2949,7 @@ static void* find_symbol(lua_State* L, int modidx, const char* asmname)
 	return sym;
 }
 
-/* pushes the user table */
+// pushes the user table 
 static void* lookup_global(lua_State* L, int modidx, int nameidx, const char** pname, CType* ct)
 {
 	int top = lua_gettop(L);
