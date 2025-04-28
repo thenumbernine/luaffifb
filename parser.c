@@ -1650,6 +1650,15 @@ static struct ctype* parse_function(lua_State* L, struct parser* P, int ct_usr, 
 	return ret;
 }
 
+/*
+Overall idk what's going on here.
+Here's from the final assert() gobbleygook:
+If the ft_usr is zero then the Lua stack isn't changed,
+If the ft_usr is nonzero (which happens when we parse a '(' ... ) then ...
+... one value is pushed to the top of the stack
+... the new top (+1 the old top) is the value of ft_usr
+... the lua value at the new top is either a table or nil
+*/
 static struct ctype* parse_argument2(
 	lua_State* L,
 	struct parser* P,
@@ -1658,16 +1667,16 @@ static struct ctype* parse_argument2(
 	struct token* name,
 	struct parser* asmname
 ) {
-	struct token tok;
 	int top = lua_gettop(L);
 	int ft_usr = 0;
 
 	luaL_checkstack(L, 10, "function too complex");
 	ct_usr = lua_absindex(L, ct_usr);
 
+	struct token tok;
 	for (;;) {
 		if (!next_token(L, P, &tok)) {
-			/* we've reached the end of the string */
+			// we've reached the end of the string
 			break;
 
 		} else if (tok.type == TOK_STAR) {
@@ -1678,7 +1687,7 @@ static struct ctype* parse_argument2(
 			ct->pointers++;
 			ct->const_mask <<= 1;
 
-			/* __declspec(align(#)) may come before the type in a member */
+			// __declspec(align(#)) may come before the type in a member
 			if (!ct->is_packed) {
 				ct->align_mask = max(min(PTR_ALIGN_MASK, P->align_mask), ct->align_mask);
 			}
@@ -1687,14 +1696,14 @@ static struct ctype* parse_argument2(
 			ct->is_reference = 1;
 
 		} else if (parse_attribute(L, P, &tok, ct, asmname)) {
-			/* parse attribute has filled out appropriate fields in type */
+			// parse attribute has filled out appropriate fields in type
 
 		} else if (tok.type == TOK_OPEN_PAREN) {
 			ct = parse_function(L, P, ct_usr, ct, name, asmname);
 			ft_usr = lua_gettop(L);
 
 		} else if (tok.type == TOK_OPEN_SQUARE) {
-			/* array */
+			// array
 			if (ct->pointers == POINTER_MAX) {
 				luaL_error(L, "maximum number of pointer derefs reached - use a struct to break up the pointers");
 			}
@@ -1720,7 +1729,7 @@ static struct ctype* parse_argument2(
 				ct->array_size = 0;
 
 			} else if (tok.type == TOK_TOKEN && IS_RESTRICT(tok)) {
-				/* odd gcc extension foo[__restrict] for arguments */
+				// odd gcc extension foo[__restrict] for arguments
 				ct->array_size = 0;
 				check_token(L, P, TOK_CLOSE_SQUARE, "", "invalid character in array on line %d", P->line);
 
@@ -1746,7 +1755,7 @@ static struct ctype* parse_argument2(
 			ct->bit_size = (unsigned) bsize;
 
 		} else if (tok.type != TOK_TOKEN) {
-			/* we've reached the end of the declaration */
+			// we've reached the end of the declaration
 			put_back(P);
 			break;
 
@@ -1754,7 +1763,7 @@ static struct ctype* parse_argument2(
 			ct->const_mask |= 1;
 
 		} else if (IS_VOLATILE(tok) || IS_RESTRICT(tok)) {
-			/* ignored for now */
+			// ignored for now
 
 		} else {
 			*name = tok;
@@ -1765,11 +1774,16 @@ static struct ctype* parse_argument2(
 	return ct;
 }
 
-static void find_canonical_usr(lua_State* L, int ct_usr, const struct ctype *ct)
-{
-	struct ctype rt;
+/*
+WTF is this?  "find_canonical_usr"
+You cannot undocument things any better than leaving them as an unnamed, indexed uservalue associated with userdata, and just expect everyone to know what's going on.
+*/
+static void find_canonical_usr(
+	lua_State* L,
+	int ct_usr,
+	const struct ctype *ct
+) {
 	int top = lua_gettop(L);
-	int types;
 
 	if (ct->type != FUNCTION_PTR_TYPE && ct->type != FUNCTION_TYPE) {
 		return;
@@ -1778,7 +1792,7 @@ static void find_canonical_usr(lua_State* L, int ct_usr, const struct ctype *ct)
 	luaL_checkstack(L, 10, "function too complex");
 	ct_usr = lua_absindex(L, ct_usr);
 
-	/* check to see if we already have the canonical usr table */
+	// check to see if we already have the canonical usr table
 	lua_pushlightuserdata(L, &g_name_key);
 	lua_rawget(L, ct_usr);
 	if (!lua_isnil(L, -1)) {
@@ -1790,20 +1804,20 @@ static void find_canonical_usr(lua_State* L, int ct_usr, const struct ctype *ct)
 
 	assert(top == lua_gettop(L));
 
-	/* first canonize the return type */
+	// first canonize the return type
 	lua_rawgeti(L, ct_usr, 0);
-	rt = *(struct ctype*) lua_touserdata(L, -1);
+	struct ctype rt = *(struct ctype*) lua_touserdata(L, -1);
 	lua_getuservalue(L, -1);
 	find_canonical_usr(L, -1, &rt);
 	push_ctype(L, -1, &rt);
 	lua_rawseti(L, ct_usr, 0);
-	lua_pop(L, 2); /* return ctype and usr */
+	lua_pop(L, 2); // return ctype and usr
 
 	assert(top == lua_gettop(L));
 
-	/* look up the type string in the types table */
+	// look up the type string in the types table
 	pushRegistry(L, &types_key);
-	types = lua_gettop(L);
+	int types = lua_gettop(L);
 
 	push_function_type_strings(L, ct_usr, ct);
 	lua_pushvalue(L, -2);
@@ -1814,7 +1828,7 @@ static void find_canonical_usr(lua_State* L, int ct_usr, const struct ctype *ct)
 	lua_rawget(L, types);
 
 	assert(lua_gettop(L) == types + 4 && types == top + 1);
-	/* stack: types, front, back, both, looked up value */
+	// stack: types, front, back, both, looked up value
 
 	if (lua_isnil(L, -1)) {
 		lua_pop(L, 1);
@@ -1847,7 +1861,7 @@ static void find_canonical_usr(lua_State* L, int ct_usr, const struct ctype *ct)
 
 /*
 parses after the main base type of a typedef, function argument or struct/union member
-eg for const void* bar[3] the base type is void with the subtype so far of const, 
+eg for const void* bar[3] the base type is void with the subtype so far of const,
 this parses the "* bar[3]" and updates the type argument ct_usr and type must be as filled out by parse_type
 
 pushes the updated user value on the top of the stack
@@ -1864,7 +1878,7 @@ void parse_argument(
 
 	struct token name;
 	memset(&name, 0, sizeof(name));
-	parse_argument2(L, P, ct_usr, ct, &name, asmname);
+	parse_argument2(L, P, ct_usr, ct, &name, asmname);		// stack: ..., [possibly an extra 'uservalue' value]
 
 	struct token tok;
 	for (;;) {
@@ -1879,7 +1893,7 @@ void parse_argument(
 	}
 
 	if (lua_gettop(L) == top) {
-		lua_pushvalue(L, ct_usr);
+		lua_pushvalue(L, ct_usr);							// stack: ..., stack[ct_usr]
 	}
 
 	find_canonical_usr(L, -1, ct);

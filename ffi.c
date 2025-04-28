@@ -28,6 +28,29 @@ int next_unnamed_key;
 int niluv_key;
 int asmname_key;
 
+/*
+Sets stack[tableLoc][key] = boolean(value)
+Leaves the stack.
+*/
+void setFieldBool(
+	lua_State * L,
+	int tableLoc,
+	char const * key,
+	int value
+) {
+	tableLoc = lua_absindex(L, tableLoc);
+	lua_pushboolean(L, value);
+	lua_setfield(L, tableLoc, key);
+}
+
+/*
+Sets stack[tableLoc][key] = true.
+Leaves the stack.
+*/
+void setFieldTrue(lua_State * L, int tableLoc, char const * key) {
+	setFieldBool(L, tableLoc, key, 1);
+}
+
 // Pushes registry[key]
 // why int* and not void* ?
 void pushRegistry(lua_State* L, void * key) {
@@ -3315,26 +3338,28 @@ static void push_builtin_undef(
 	lua_pop(L, 1);					// stack: ...
 }
 
+/*
+Adds a new entry in registry[&types_key][to] that points to a new ctype userdata that represents whatever was parsed from `from`.
+Leaves the stack the same.
+*/
 static void add_typedef(
 	lua_State* L,
 	const char* from,
 	const char* to
-) {									// stack: ...
+) {												// stack: ...
 	struct parser P;
 	P.line = 1;
 	P.align_mask = DEFAULT_ALIGN_MASK;
 	P.next = P.prev = from;
 
-	pushRegistry(L, &types_key);	// stack: ..., registry[&types_key]
+	pushRegistry(L, &types_key);				// stack: ..., registry[&types_key]
 	struct ctype ct;
-	parse_type(L, &P, &ct);			// stack: ..., registry[&types_key], ctype uservalue 0
-	parse_argument(L, &P, -1, &ct, NULL, NULL);
-	push_ctype(L, -1, &ct);			// stack: ..., registry[&types_key], ct
+	parse_type(L, &P, &ct);						// stack: ..., registry[&types_key], ctype uservalue 0
+	parse_argument(L, &P, -1, &ct, NULL, NULL);	// stack: ..., registry[&types_key], ctype uservalue 0, arg??? uservalue 0
+	push_ctype(L, -1, &ct);						// stack: ..., registry[&types_key], ctype uservalue 0, arg uservalue 0, userdata copy of ct
 
-	/* stack is at +4: types, type usr, arg usr, ctype */
-
-	lua_setfield(L, -4, to);
-	lua_pop(L, 3); /* types, type usr, arg usr */
+	lua_setfield(L, -4, to);					// stack: ..., registry[&types_key], ctype uservalue 0, arg uservalue 0;  registry[&types_key][to] = userdata copy of ct
+	lua_pop(L, 3);								// stack: ...
 }
 
 /*
@@ -3538,49 +3563,41 @@ static int ffiInit(lua_State* L) {
 		if (sizeof(va_list) == sizeof(char*)) {
 			add_typedef(L, "char*", "va_list");
 		} else {
+			char tmp[256];
 			struct {char ch; va_list v;} av;
-			lua_pushfstring(L, "struct {char data[%d] __attribute__((align(%d)));}", (int) sizeof(va_list), (int) ALIGNOF(av) + 1);
-			add_typedef(L, lua_tostring(L, -1), "va_list");
-			lua_pop(L, 1);
+			sprintf(tmp, "struct {char data[%d] __attribute__((align(%d)));}", (int) sizeof(va_list), (int) ALIGNOF(av) + 1);
+			add_typedef(L, tmp, "va_list");
 		}
 
 		add_typedef(L, "va_list", "__builtin_va_list");
 		add_typedef(L, "va_list", "__gnuc_va_list");
 	}
 
-	assert(lua_gettop(L) == 1);
+	assert(lua_gettop(L) == 1);						// stack: ffi
 
-	/* setup ABI params table */
-	pushRegistry(L, &abi_key);
+	// setup ABI params table
+	pushRegistry(L, &abi_key);						// stack: ffi, registry[&abi_key]
 
 #if defined ARCH_X86 || defined ARCH_ARM
-	lua_pushboolean(L, 1);
-	lua_setfield(L, -2, "32bit");
-#elif defined ARCH_X64 || defined ARCH_PPC64
-	lua_pushboolean(L, 1);
-	lua_setfield(L, -2, "64bit");
-#elif defined ARCH_WASM
-	lua_pushboolean(L, 1);
-	lua_setfield(L, -2, "64bit");
+	setFieldTrue(L, -1, "32bit");
+#elif defined ARCH_X64 || defined ARCH_PPC64 || defined ARCH_WASM
+	setFieldTrue(L, -1, "64bit");
 #else
-#error
+#error cannot determine ABI
 #endif
 
 #if defined ARCH_X86 || defined ARCH_X64 || defined ARCH_ARM || defined ARCH_PPC64 || defined ARCH_WASM
-	lua_pushboolean(L, 1);
-	lua_setfield(L, -2, "le");
+	setFieldTrue(L, -1, "le");
 #else
-#error
+#error cannot determine le
 #endif
 
 #if defined ARCH_X86 || defined ARCH_X64 || defined ARCH_PPC64 || defined ARCH_WASM
-	lua_pushboolean(L, 1);
-	lua_setfield(L, -2, "fpu");
+	setFieldTrue(L, -1, "fpu");
 #elif defined ARCH_ARM
-	lua_pushboolean(L, 1);
-	lua_setfield(L, -2, "softfp");
+	setFieldTrue(L, -1, "softfp");
 #else
-#error
+#error cannot determine fpu
 #endif
 	lua_pop(L, 1); /* abi tbl */
 
