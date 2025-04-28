@@ -30,20 +30,14 @@ all: ffi.so
 	#luarocks make
 	# luarocks disagreed so...
 
-ffi.so: call.o ctype.o ffi.o parser.o
+SRCS= call.c ctype.c ffi.c parser.c ffi_complex.c
+OBJS= $(patsubst %.c, %.o, $(SRCS))
+
+ffi.so: $(OBJS)
 	$(CC) $(LDFLAGS) -o ffi.so $^
 	install_name_tool -change liblua.5.4.7.so /usr/local/lib/lua-5.4.7/liblua.5.4.7.so ffi.so
 
-call.o: call.c
-	$(CC) $(CFLAGS) -c -o $@ $^
-
-ctype.o: ctype.c
-	$(CC) $(CFLAGS) -c -o $@ $^
-
-ffi.o: ffi.c
-	$(CC) $(CFLAGS) -c -o $@ $^
-
-parser.o: parser.c
+%.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $^
 
 clean:
