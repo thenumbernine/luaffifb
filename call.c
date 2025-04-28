@@ -28,7 +28,6 @@ static void SetLastError(int err) { errno = err; }
 #define shred(p,s,e) memset((uint8_t*)(p)+(s),0xCC,(e)-(s))
 #endif
 
-
 #ifdef __wasm__
 
 // wasm libffi compile_ goes here, not somewhere else, cuz I want to generate a diff patch
@@ -261,7 +260,7 @@ typedef uint8_t jump_t[JUMP_SIZE];
 
 int get_extern(struct jit* jit, uint8_t* addr, int idx, int type)
 {
-	struct page* page = jit->pages[jit->pagenum-1];
+	Page* page = jit->pages[jit->pagenum-1];
 	jump_t* jumps = (jump_t*) (page+1);
 	struct jit_head* h = (struct jit_head*) ((uint8_t*) page + page->off);
 	uint8_t* jmp;
@@ -290,25 +289,25 @@ int get_extern(struct jit* jit, uint8_t* addr, int idx, int type)
 
 static void* reserve_code(struct jit* jit, lua_State* L, size_t sz)
 {
-	struct page* page;
 	size_t off = (jit->pagenum > 0) ? jit->pages[jit->pagenum-1]->off : 0;
 	size_t size = (jit->pagenum > 0) ? jit->pages[jit->pagenum-1]->size : 0;
 
+	Page * page;
 	if (off + sz >= size) {
 		int i;
 		uint8_t* pdata;
 		CFunction func;
 
 		/* need to create a new page */
-		jit->pages = (struct page**) realloc(jit->pages, (++jit->pagenum) * sizeof(jit->pages[0]));
+		jit->pages = (Page**) realloc(jit->pages, (++jit->pagenum) * sizeof(jit->pages[0]));
 
-		size = ALIGN_UP(sz + LINKTABLE_MAX_SIZE + sizeof(struct page), jit->align_page_size);
+		size = ALIGN_UP(sz + LINKTABLE_MAX_SIZE + sizeof(Page), jit->align_page_size);
 
-		page = (struct page*) AllocPage(size);
+		page = (Page*) AllocPage(size);
 		jit->pages[jit->pagenum-1] = page;
 		pdata = (uint8_t*) page;
 		page->size = size;
-		page->off = sizeof(struct page);
+		page->off = sizeof(Page);
 
 		lua_newtable(L);
 
@@ -388,7 +387,7 @@ static void* reserve_code(struct jit* jit, lua_State* L, size_t sz)
 
 static void commit_code(struct jit* jit, void* code, size_t sz)
 {
-	struct page* page = jit->pages[jit->pagenum-1];
+	Page* page = jit->pages[jit->pagenum-1];
 	page->off += sz;
 	EnableExecute(page, page->size);
 	{
@@ -414,7 +413,7 @@ void free_code(struct jit* jit, lua_State* L, CFunction func)
 	size_t i;
 	struct jit_head* h = ((struct jit_head*) func) - 1;
 	for (i = 0; i < jit->pagenum; i++) {
-		struct page* p = jit->pages[i];
+		Page* p = jit->pages[i];
 
 		if ((uint8_t*) h < (uint8_t*) p || (uint8_t*) p + p->size <= (uint8_t*) h) {
 			continue;

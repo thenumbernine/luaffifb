@@ -42,12 +42,12 @@ enum etoken {
 	TOK_BITWISE_AND = TOK_AMPERSAND,
 };
 
-struct token {
+typedef struct Token {
 	enum etoken type;
 	int64_t integer;
 	const char* str;
 	size_t size;
-};
+} Token;
 
 
 Parser newParser(char const * str) {
@@ -82,7 +82,7 @@ static char tok1[] = {
 	'>', '^', '|', '?', '#'
 };
 
-static int next_token(lua_State* L, Parser* P, struct token* tok)
+static int next_token(lua_State* L, Parser* P, Token* tok)
 {
 	size_t i;
 	const char* s = P->next;
@@ -230,7 +230,7 @@ end:
 
 #define require_token(L, P, tok) require_token_line(L, P, tok, __FILE__, __LINE__)
 
-static void require_token_line(lua_State* L, Parser* P, struct token* tok, const char* file, int line)
+static void require_token_line(lua_State* L, Parser* P, Token* tok, const char* file, int line)
 {
 	if (!next_token(L, P, tok)) {
 		luaL_error(L, "unexpected end on line %s:%d", file, line);
@@ -239,7 +239,7 @@ static void require_token_line(lua_State* L, Parser* P, struct token* tok, const
 
 static void check_token(lua_State* L, Parser* P, int type, const char* str, const char* err, ...)
 {
-	struct token tok;
+	Token tok;
 	if (!next_token(L, P, &tok) || tok.type != type || (tok.type == TOK_TOKEN && (tok.size != strlen(str) || memcmp(tok.str, str, tok.size) != 0))) {
 		va_list ap;
 		va_start(ap, err);
@@ -272,7 +272,7 @@ enum test {TEST};
  */
 static int parse_enum(lua_State* L, Parser* P, CType* type)
 {
-	struct token tok;
+	Token tok;
 	int value = -1;
 	int ct_usr = lua_gettop(L);
 
@@ -566,7 +566,7 @@ static int add_member(lua_State* L, int ct_usr, int mname, int mbr_usr, const CT
  */
 static int parse_struct(lua_State* L, Parser* P, int tmp_usr, const CType* ct)
 {
-	struct token tok;
+	Token tok;
 	int midx = 1;
 	int top = lua_gettop(L);
 
@@ -599,7 +599,7 @@ static int parse_struct(lua_State* L, Parser* P, int tmp_usr, const CType* ct)
 		parse_type(L, P, &mbase);
 
 		for (;;) {
-			struct token mname;
+			Token mname;
 			CType mt = mbase;
 
 			memset(&mname, 0, sizeof(mname));
@@ -730,7 +730,7 @@ static void instantiate_typedef(Parser* P, CType* tt, const CType* ft)
  */
 static int parse_record(lua_State* L, Parser* P, CType* ct)
 {
-	struct token tok;
+	Token tok;
 	int top = lua_gettop(L);
 
 	require_token(L, P, &tok);
@@ -858,7 +858,7 @@ static int parse_type_name(
 	lua_State * L,
 	Parser * P
 ) {
-	struct token tok;
+	Token tok;
 	int flags = 0;
 
 	enum {
@@ -1009,7 +1009,7 @@ static int parse_type_name(
  * more following it) or 0 if not. If the token was used, the next token must
  * be retrieved using next_token/require_token.
  */
-static int parse_attribute(lua_State* L, Parser* P, struct token* tok, CType* ct, Parser* asmname)
+static int parse_attribute(lua_State* L, Parser* P, Token* tok, CType* ct, Parser* asmname)
 {
 	if (tok->type != TOK_TOKEN) {
 		return 0;
@@ -1203,7 +1203,7 @@ void parse_type(
 
 	memset(ct, 0, sizeof(*ct));
 
-	struct token tok;
+	Token tok;
 	require_token(L, P, &tok);
 
 	// get const/volatile before the base type
@@ -1501,7 +1501,7 @@ static void push_function_type_strings(lua_State* L, int usr, const CType* ct)
 /* parses from after the opening paranthesis to after the closing parenthesis */
 static void parse_function_arguments(lua_State* L, Parser* P, int ct_usr, CType* ct)
 {
-	struct token tok;
+	Token tok;
 	int args = 0;
 	int top = lua_gettop(L);
 
@@ -1582,7 +1582,7 @@ static int max_bitfield_size(int type)
 	}
 }
 
-static CType* parse_argument2(lua_State* L, Parser* P, int ct_usr, CType* ct, struct token* name, Parser* asmname);
+static CType* parse_argument2(lua_State* L, Parser* P, int ct_usr, CType* ct, Token* name, Parser* asmname);
 
 /* parses from after the first ( in a function declaration or function pointer
  * can be one of:
@@ -1590,13 +1590,13 @@ static CType* parse_argument2(lua_State* L, Parser* P, int ct_usr, CType* ct, st
  * void (foo)(...) before foo
  * void (* <>)(...) before <> which is the inner type
  */
-static CType* parse_function(lua_State* L, Parser* P, int ct_usr, CType* ct, struct token* name, Parser* asmname)
+static CType* parse_function(lua_State* L, Parser* P, int ct_usr, CType* ct, Token* name, Parser* asmname)
 {
 	/* We have a function pointer or a function. The usr table will
 	 * get replaced by the canonical one (if there is one) in
 	 * find_canonical_usr after all the arguments and returns have
 	 * been parsed. */
-	struct token tok;
+	Token tok;
 	int top = lua_gettop(L);
 	CType* ret;
 
@@ -1675,7 +1675,7 @@ static CType* parse_argument2(
 	Parser* P,
 	int ct_usr,
 	CType* ct,
-	struct token* name,
+	Token* name,
 	Parser* asmname
 ) {
 	int top = lua_gettop(L);
@@ -1684,7 +1684,7 @@ static CType* parse_argument2(
 	luaL_checkstack(L, 10, "function too complex");
 	ct_usr = lua_absindex(L, ct_usr);
 
-	struct token tok;
+	Token tok;
 	for (;;) {
 		if (!next_token(L, P, &tok)) {
 			// we've reached the end of the string
@@ -1882,16 +1882,16 @@ void parse_argument(
 	Parser * P,
 	int ct_usr,
 	CType * ct,
-	struct token * pname,
+	Token * pname,
 	Parser * asmname
 ) {
 	int top = lua_gettop(L);
 
-	struct token name;
+	Token name;
 	memset(&name, 0, sizeof(name));
 	parse_argument2(L, P, ct_usr, ct, &name, asmname);		// stack: ..., [possibly an extra 'uservalue' value]
 
-	struct token tok;
+	Token tok;
 	for (;;) {
 		if (!next_token(L, P, &tok)) {
 			break;
@@ -1920,10 +1920,10 @@ static void parse_typedef(lua_State* L, Parser* P) {
 	CType base_type;
 	parse_type(L, P, &base_type);
 
-	struct token tok;
+	Token tok;
 	for (;;) {
 		CType arg_type = base_type;
-		struct token name;
+		Token name;
 
 		memset(&name, 0, sizeof(name));
 
@@ -1981,7 +1981,7 @@ static void push_strings(lua_State* L, Parser* P)
 	for (;;) {
 		const char *p, *e;
 		char *t, *s;
-		struct token tok;
+		Token tok;
 
 		require_token(L, P, &tok);
 		if (tok.type != TOK_STRING) {
@@ -2054,7 +2054,7 @@ static void push_strings(lua_State* L, Parser* P)
 static void parse_constant_assignemnt(lua_State* L,
 									  Parser* P,
 									  const CType* type,
-									  const struct token* name)
+									  const Token* name)
 {
 	int64_t val = calculate_constant(L, P);
 
@@ -2087,7 +2087,7 @@ static void parse_constant_assignemnt(lua_State* L,
 static int parse_root(lua_State* L, Parser* P)
 {
 	int top = lua_gettop(L);
-	struct token tok;
+	Token tok;
 
 	while (next_token(L, P, &tok)) {
 		/* we can have:
@@ -2159,7 +2159,7 @@ static int parse_root(lua_State* L, Parser* P)
 		} else {
 			/* type declaration, type definition, or function declaration */
 			CType type;
-			struct token name;
+			Token name;
 			Parser asmname;
 
 			memset(&name, 0, sizeof(name));
@@ -2293,7 +2293,7 @@ static int try_cast(lua_State* L)
 {
 	Parser* P = (Parser*) lua_touserdata(L, 1);
 	CType ct;
-	struct token name, tok;
+	Token name, tok;
 	memset(&name, 0, sizeof(name));
 
 	parse_type(L, P, &ct);
@@ -2311,10 +2311,10 @@ static int try_cast(lua_State* L)
 	return 0;
 }
 
-static int64_t calculate_constant2(lua_State* L, Parser* P, struct token* tok);
+static int64_t calculate_constant2(lua_State* L, Parser* P, Token* tok);
 
 /* () */
-static int64_t calculate_constant1(lua_State* L, Parser* P, struct token* tok)
+static int64_t calculate_constant1(lua_State* L, Parser* P, Token* tok)
 {
 	int64_t ret;
 
@@ -2376,7 +2376,7 @@ static int64_t calculate_constant1(lua_State* L, Parser* P, struct token* tok)
 }
 
 /* ! and ~, unary + and -, and sizeof */
-static int64_t calculate_constant2(lua_State* L, Parser* P, struct token* tok)
+static int64_t calculate_constant2(lua_State* L, Parser* P, Token* tok)
 {
 	if (tok->type == TOK_LOGICAL_NOT) {
 		require_token(L, P, tok);
@@ -2427,7 +2427,7 @@ static int64_t calculate_constant2(lua_State* L, Parser* P, struct token* tok)
 }
 
 /* binary * / and % (left associative) */
-static int64_t calculate_constant3(lua_State* L, Parser* P, struct token* tok)
+static int64_t calculate_constant3(lua_State* L, Parser* P, Token* tok)
 {
 	int64_t left = calculate_constant2(L, P, tok);
 
@@ -2451,7 +2451,7 @@ static int64_t calculate_constant3(lua_State* L, Parser* P, struct token* tok)
 }
 
 /* binary + and - (left associative) */
-static int64_t calculate_constant4(lua_State* L, Parser* P, struct token* tok)
+static int64_t calculate_constant4(lua_State* L, Parser* P, Token* tok)
 {
 	int64_t left = calculate_constant3(L, P, tok);
 
@@ -2471,7 +2471,7 @@ static int64_t calculate_constant4(lua_State* L, Parser* P, struct token* tok)
 }
 
 /* binary << and >> (left associative) */
-static int64_t calculate_constant5(lua_State* L, Parser* P, struct token* tok)
+static int64_t calculate_constant5(lua_State* L, Parser* P, Token* tok)
 {
 	int64_t left = calculate_constant4(L, P, tok);
 
@@ -2491,7 +2491,7 @@ static int64_t calculate_constant5(lua_State* L, Parser* P, struct token* tok)
 }
 
 /* binary <, <=, >, and >= (left associative) */
-static int64_t calculate_constant6(lua_State* L, Parser* P, struct token* tok)
+static int64_t calculate_constant6(lua_State* L, Parser* P, Token* tok)
 {
 	int64_t left = calculate_constant5(L, P, tok);
 
@@ -2519,7 +2519,7 @@ static int64_t calculate_constant6(lua_State* L, Parser* P, struct token* tok)
 }
 
 /* binary ==, != (left associative) */
-static int64_t calculate_constant7(lua_State* L, Parser* P, struct token* tok)
+static int64_t calculate_constant7(lua_State* L, Parser* P, Token* tok)
 {
 	int64_t left = calculate_constant6(L, P, tok);
 
@@ -2539,7 +2539,7 @@ static int64_t calculate_constant7(lua_State* L, Parser* P, struct token* tok)
 }
 
 /* binary & (left associative) */
-static int64_t calculate_constant8(lua_State* L, Parser* P, struct token* tok)
+static int64_t calculate_constant8(lua_State* L, Parser* P, Token* tok)
 {
 	int64_t left = calculate_constant7(L, P, tok);
 
@@ -2555,7 +2555,7 @@ static int64_t calculate_constant8(lua_State* L, Parser* P, struct token* tok)
 }
 
 /* binary ^ (left associative) */
-static int64_t calculate_constant9(lua_State* L, Parser* P, struct token* tok)
+static int64_t calculate_constant9(lua_State* L, Parser* P, Token* tok)
 {
 	int64_t left = calculate_constant8(L, P, tok);
 
@@ -2571,7 +2571,7 @@ static int64_t calculate_constant9(lua_State* L, Parser* P, struct token* tok)
 }
 
 /* binary | (left associative) */
-static int64_t calculate_constant10(lua_State* L, Parser* P, struct token* tok)
+static int64_t calculate_constant10(lua_State* L, Parser* P, Token* tok)
 {
 	int64_t left = calculate_constant9(L, P, tok);
 
@@ -2587,7 +2587,7 @@ static int64_t calculate_constant10(lua_State* L, Parser* P, struct token* tok)
 }
 
 /* binary && (left associative) */
-static int64_t calculate_constant11(lua_State* L, Parser* P, struct token* tok)
+static int64_t calculate_constant11(lua_State* L, Parser* P, Token* tok)
 {
 	int64_t left = calculate_constant10(L, P, tok);
 
@@ -2603,7 +2603,7 @@ static int64_t calculate_constant11(lua_State* L, Parser* P, struct token* tok)
 }
 
 /* binary || (left associative) */
-static int64_t calculate_constant12(lua_State* L, Parser* P, struct token* tok)
+static int64_t calculate_constant12(lua_State* L, Parser* P, Token* tok)
 {
 	int64_t left = calculate_constant11(L, P, tok);
 
@@ -2619,7 +2619,7 @@ static int64_t calculate_constant12(lua_State* L, Parser* P, struct token* tok)
 }
 
 /* ternary ?: (right associative) */
-static int64_t calculate_constant13(lua_State* L, Parser* P, struct token* tok)
+static int64_t calculate_constant13(lua_State* L, Parser* P, Token* tok)
 {
 	int64_t left = calculate_constant12(L, P, tok);
 
@@ -2641,7 +2641,7 @@ static int64_t calculate_constant13(lua_State* L, Parser* P, struct token* tok)
 
 int64_t calculate_constant(lua_State* L, Parser* P)
 {
-	struct token tok;
+	Token tok;
 	int64_t ret;
 	require_token(L, P, &tok);
 	ret = calculate_constant13(L, P, &tok);

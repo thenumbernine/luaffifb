@@ -52,6 +52,12 @@ struct jit;
 # define EXPORT
 #endif
 
+#ifdef __cplusplus
+# define EXTERN_C extern "C"
+#else
+# define EXTERN_C extern
+#endif
+
 EXTERN_C EXPORT int luaopen_ffi(lua_State* L);
 
 // architectures
@@ -131,20 +137,15 @@ EXTERN_C EXPORT int luaopen_ffi(lua_State* L);
 #define ALLOW_MISALIGNED_ACCESS
 #endif
 
-struct token;
-
-struct page {
-	size_t size;
-	size_t off;
-	size_t freed;
-};
+struct Page;		// defined in call.h, used in call.c and ffi.c
+struct DASMState;	// defined in dynasm/dasm_*.h
 
 struct jit {
 	lua_State* L;
 	int32_t last_errno;
-	dasm_State* ctx;
+	struct DASMState* ctx;
 	size_t pagenum;
-	struct page** pages;
+	struct Page** pages;
 	size_t align_page_size;
 	void** globals;
 	int function_extern;

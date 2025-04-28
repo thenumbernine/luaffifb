@@ -6,12 +6,10 @@ extern "C" {
 # include <lauxlib.h>
 # include <lualib.h>
 }
-# define EXTERN_C extern "C"
 #else
 # include <lua.h>
 # include <lauxlib.h>
 # include <lualib.h>
-# define EXTERN_C extern
 #endif
 
 int lua_absindex2(lua_State* L, int idx);

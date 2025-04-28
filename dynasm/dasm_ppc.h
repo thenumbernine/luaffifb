@@ -53,17 +53,17 @@ enum {
 typedef const unsigned int *dasm_ActList;
 
 /* Per-section structure. */
-typedef struct dasm_Section {
+typedef struct DASMSection {
   int *rbuf;		/* Biased buffer pointer (negative section bias). */
   int *buf;		/* True buffer pointer. */
   size_t bsize;		/* Buffer size in bytes. */
   int pos;		/* Biased buffer position. */
   int epos;		/* End of biased buffer position - max single put. */
   int ofs;		/* Byte offset into section. */
-} dasm_Section;
+} DASMSection;
 
 /* Core structure holding the DynASM encoding state. */
-struct dasm_State {
+typedef struct DASMState {
   size_t psize;			/* Allocated size of this structure. */
   dasm_ActList actionlist;	/* Current actionlist pointer. */
   int *lglabels;		/* Local/global chain/pos ptrs. */
@@ -71,25 +71,25 @@ struct dasm_State {
   int *pclabels;		/* PC label chains/pos ptrs. */
   size_t pcsize;
   void **globals;		/* Array of globals (bias -10). */
-  dasm_Section *section;	/* Pointer to active section. */
+  DASMSection *section;	/* Pointer to active section. */
   size_t codesize;		/* Total size of all code sections. */
   int maxsection;		/* 0 <= sectionidx < maxsection. */
   int status;			/* Status code. */
-  dasm_Section sections[1];	/* All sections. Alloc-extended. */
-};
+  DASMSection sections[1];	/* All sections. Alloc-extended. */
+} DASMState;
 
 /* The size of the core structure depends on the max. number of sections. */
-#define DASM_PSZ(ms)	(sizeof(dasm_State)+(ms-1)*sizeof(dasm_Section))
+#define DASM_PSZ(ms)	(sizeof(DASMState)+(ms-1)*sizeof(DASMSection))
 
 
 /* Initialize DynASM state. */
 void dasm_init(Dst_DECL, int maxsection)
 {
-  dasm_State *D;
+  DASMState *D;
   size_t psz = 0;
   int i;
   Dst_REF = NULL;
-  DASM_M_GROW(Dst, struct dasm_State, Dst_REF, psz, DASM_PSZ(maxsection));
+  DASM_M_GROW(Dst, struct DASMState, Dst_REF, psz, DASM_PSZ(maxsection));
   D = Dst_REF;
   D->psize = psz;
   D->lglabels = NULL;
@@ -109,7 +109,7 @@ void dasm_init(Dst_DECL, int maxsection)
 /* Free DynASM state. */
 void dasm_free(Dst_DECL)
 {
-  dasm_State *D = Dst_REF;
+  DASMState *D = Dst_REF;
   int i;
   for (i = 0; i < D->maxsection; i++)
     if (D->sections[i].buf)
@@ -122,7 +122,7 @@ void dasm_free(Dst_DECL)
 /* Setup global label array. Must be called before dasm_setup(). */
 void dasm_setupglobal(Dst_DECL, void **gl, unsigned int maxgl)
 {
-  dasm_State *D = Dst_REF;
+  DASMState *D = Dst_REF;
   D->globals = gl - 10;  /* Negative bias to compensate for locals. */
   DASM_M_GROW(Dst, int, D->lglabels, D->lgsize, (10+maxgl)*sizeof(int));
 }
@@ -130,7 +130,7 @@ void dasm_setupglobal(Dst_DECL, void **gl, unsigned int maxgl)
 /* Grow PC label array. Can be called after dasm_setup(), too. */
 void dasm_growpc(Dst_DECL, unsigned int maxpc)
 {
-  dasm_State *D = Dst_REF;
+  DASMState *D = Dst_REF;
   size_t osz = D->pcsize;
   DASM_M_GROW(Dst, int, D->pclabels, D->pcsize, maxpc*sizeof(int));
   memset((void *)(((unsigned char *)D->pclabels)+osz), 0, D->pcsize-osz);
@@ -139,7 +139,7 @@ void dasm_growpc(Dst_DECL, unsigned int maxpc)
 /* Setup encoder. */
 void dasm_setup(Dst_DECL, const void *actionlist)
 {
-  dasm_State *D = Dst_REF;
+  DASMState *D = Dst_REF;
   int i;
   D->actionlist = (dasm_ActList)actionlist;
   D->status = DASM_S_OK;
@@ -169,9 +169,9 @@ void dasm_setup(Dst_DECL, const void *actionlist)
 void dasm_put(Dst_DECL, int start, ...)
 {
   va_list ap;
-  dasm_State *D = Dst_REF;
+  DASMState *D = Dst_REF;
   dasm_ActList p = D->actionlist + start;
-  dasm_Section *sec = D->section;
+  DASMSection *sec = D->section;
   int pos = sec->pos, ofs = sec->ofs;
   int *b;
 
@@ -254,7 +254,7 @@ stop:
 /* Pass 2: Link sections, shrink aligns, fix label offsets. */
 int dasm_link(Dst_DECL, size_t *szp)
 {
-  dasm_State *D = Dst_REF;
+  DASMState *D = Dst_REF;
   int secnum;
   int ofs = 0;
 
@@ -279,7 +279,7 @@ int dasm_link(Dst_DECL, size_t *szp)
 
   /* Combine all code sections. No support for data sections (yet). */
   for (secnum = 0; secnum < D->maxsection; secnum++) {
-    dasm_Section *sec = D->sections + secnum;
+    DASMSection *sec = D->sections + secnum;
     int *b = sec->rbuf;
     int pos = DASM_SEC2POS(secnum);
     int lastpos = sec->pos;
@@ -319,14 +319,14 @@ int dasm_link(Dst_DECL, size_t *szp)
 /* Pass 3: Encode sections. */
 int dasm_encode(Dst_DECL, void *buffer)
 {
-  dasm_State *D = Dst_REF;
+  DASMState *D = Dst_REF;
   char *base = (char *)buffer;
   unsigned int *cp = (unsigned int *)buffer;
   int secnum;
 
   /* Encode all code sections. No support for data sections (yet). */
   for (secnum = 0; secnum < D->maxsection; secnum++) {
-    dasm_Section *sec = D->sections + secnum;
+    DASMSection *sec = D->sections + secnum;
     int *b = sec->buf;
     int *endb = sec->rbuf + sec->pos;
 
@@ -379,7 +379,7 @@ int dasm_encode(Dst_DECL, void *buffer)
 /* Get PC label offset. */
 int dasm_getpclabel(Dst_DECL, unsigned int pc)
 {
-  dasm_State *D = Dst_REF;
+  DASMState *D = Dst_REF;
   if (pc*sizeof(int) < D->pcsize) {
     int pos = D->pclabels[pc];
     if (pos < 0) return *DASM_POS2PTR(D, -pos);
@@ -392,7 +392,7 @@ int dasm_getpclabel(Dst_DECL, unsigned int pc)
 /* Optional sanity checker to call between isolated encoding steps. */
 int dasm_checkstep(Dst_DECL, int secmatch)
 {
-  dasm_State *D = Dst_REF;
+  DASMState *D = Dst_REF;
   if (D->status == DASM_S_OK) {
     int i;
     for (i = 1; i <= 9; i++) {

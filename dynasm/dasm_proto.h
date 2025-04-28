@@ -14,7 +14,7 @@
 #define DASM_VERSION	10300	/* 1.3.0 */
 
 #ifndef Dst_DECL
-#define Dst_DECL	dasm_State **Dst
+#define Dst_DECL	DASMState **Dst
 #endif
 
 #ifndef Dst_REF
@@ -42,10 +42,6 @@
 #ifndef DASM_M_FREE
 #define DASM_M_FREE(ctx, p, sz)	free(p)
 #endif
-
-// Internal DynASM encoder state. 
-typedef struct dasm_State dasm_State;
-
 
 // Initialize and free DynASM state. 
 DASM_FDEF void dasm_init(Dst_DECL, int maxsection);
