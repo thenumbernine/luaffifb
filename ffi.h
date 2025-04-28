@@ -291,7 +291,7 @@ enum {
     UNION_TYPE,
     STRUCT_TYPE,
     FUNCTION_TYPE,
-    FUNCTION_PTR_TYPE,
+    FUNCTION_PTR_TYPE,	// why separate FUNCTION_PTR_TYPE instead of just FUNCTION_TYPE with pointers set?
 };
 
 #define IS_CHAR_UNSIGNED (((char) -1) > 0)
@@ -354,7 +354,7 @@ struct ctype {
 __declspec(align(16))
 #endif
 struct cdata {
-    const struct ctype type
+    struct ctype type
 #ifdef __GNUC__
       __attribute__ ((aligned(16)))
 #endif
@@ -415,7 +415,7 @@ void* to_cdata(lua_State* L, int idx, struct ctype* ct);
 void* check_cdata(lua_State* L, int idx, struct ctype* ct);
 size_t ctype_size(lua_State* L, const struct ctype* ct);
 
-int parse_type(lua_State* L, struct parser* P, struct ctype* type);
+void parse_type(lua_State* L, struct parser* P, struct ctype* type);
 void parse_argument(lua_State* L, struct parser* P, int ct_usr, struct ctype* type, struct token* name, struct parser* asmname);
 void push_type_name(lua_State* L, int usr, const struct ctype* ct);
 

@@ -59,7 +59,7 @@ int equalsRegistry(lua_State* L, int idx, void * key)
 /*
 Get the struct jit* userdata of registry[jit_key].
 Update the jit->L lua State to the arg passed.
-Leaves the stack how it is.
+Leaves the stack the same.
 */
 struct jit* get_jit(lua_State* L) {
 	struct jit* jit;							// stack: ...
@@ -2717,15 +2717,17 @@ static int ffi_type(lua_State* L)
 }
 
 static int ffi_number(lua_State* L) {
+														// stack: x, ...
 	struct ctype ct;
-	void* data = to_cdata(L, 1, &ct);
+	void * data = to_cdata(L, 1, &ct);					// stack: x, ..., x's uservalue 0 or nil
 
 	// not cdata <=> handle default case
 	if (ct.type == INVALID_TYPE) {
 		// call the old _G.tonumber, we use an upvalue as _G.tonumber is set to this function
-		lua_pushvalue(L, lua_upvalueindex(1));			// stack: x, tonumber
-		lua_insert(L, 1);								// stack: tonumber, x
-		lua_call(L, lua_gettop(L)-1, LUA_MULTRET);		// stack: ...
+		lua_pop(L, 1);									// stack: x, ...
+		lua_pushvalue(L, lua_upvalueindex(1));			// stack: x, ..., tonumber
+		lua_insert(L, 1);								// stack: tonumber, x, ...
+		lua_call(L, lua_gettop(L)-1, LUA_MULTRET);		// stack: tonumber(x, ...) results...
 		return lua_gettop(L);
 	}
 
@@ -2737,23 +2739,23 @@ static int ffi_number(lua_State* L) {
 		|| ct.type == FUNCTION_TYPE
 		|| ct.type == FUNCTION_PTR_TYPE
 		|| ct.is_array
-		|| ct.is_variable_array
+		|| ct.is_variable_array				// I think this is only set if is_array is set ... if so this test can be removed.
 		|| ct.pointers
 	) {
-		lua_pushnil(L);
+		lua_pushnil(L);									// stack: x, ..., x's uservalue 0, nil
 		return 1;
 	}
 
 	if (ct.type == FLOAT_TYPE || ct.type == COMPLEX_FLOAT_TYPE) {
-		lua_pushnumber(L, *(float*)data);
+		lua_pushnumber(L, *(float*)data);				// stack: x, ..., x's uservalue 0, *(float*)data
 		return 1;
 	}
 
 	if (ct.type == DOUBLE_TYPE || ct.type == COMPLEX_DOUBLE_TYPE) {
-		lua_pushnumber(L, *(double*)data);
+		lua_pushnumber(L, *(double*)data);				// stack: x, ..., x's uservalue 0, *(double*)data
 		return 1;
-	} 
-	
+	}
+
 	// assume it's an integer type
 	lua_pushinteger(L, check_intptr(L, 1, data, &ct));
 	return 1;
@@ -3259,9 +3261,22 @@ static const luaL_Reg ffi_reg[] = {
 	{NULL, NULL}
 };
 
-/* leaves the usr table on the stack */
-static void push_builtin(lua_State* L, struct ctype* ct, const char* name, int type, int size, int align, int is_unsigned)
-{
+/*
+Fills out ctype with args passed.
+Creates userdata of the ctype, gives it a uservalue of {} if it IS_COMPLEX
+Sets registry[types_key] = the userdata of ctype
+Leaves the stack the same.
+*/
+static void push_builtin(
+	lua_State* L,
+	struct ctype* ct,
+	const char* name,
+	int type,
+	int size,
+	int align,
+	int is_unsigned
+) {
+									// stack: ...
 	memset(ct, 0, sizeof(*ct));
 	ct->type = type;
 	ct->base_size = size;
@@ -3270,40 +3285,51 @@ static void push_builtin(lua_State* L, struct ctype* ct, const char* name, int t
 	ct->is_unsigned = is_unsigned;
 
 	if (IS_COMPLEX(type)) {
-		lua_newtable(L);
+		lua_newtable(L);			// stack: ..., ctype uservalue = {}
 	} else {
-		lua_pushnil(L);
+		lua_pushnil(L);				// stack: ..., ctype uservalue = nil
 	}
 
-	pushRegistry(L, &types_key);
-	push_ctype(L, -2, ct);
-	lua_setfield(L, -2, name);
-	lua_pop(L, 2); /* types, usr table */
+	pushRegistry(L, &types_key);	// stack: ..., ctype uservalue, registry[types_key]
+	push_ctype(L, -2, ct);			// stack: ..., ctype uservalue, registry[types_key], userdata of ct
+	lua_setfield(L, -2, name);		// stack: ..., ctype uservalue, registry[types_key];  registry[types_key][name] = userdata of ct
+	lua_pop(L, 2); 					// stack: ...
 }
 
-static void push_builtin_undef(lua_State* L, struct ctype* ct, const char* name, int type)
-{
+/*
+Same exact thing as push_builtin except size, align, is_unsigned default to zero.
+Except here no uservalue is ever created for the ct userdata copy, even if the type is complex.
+*/
+static void push_builtin_undef(
+	lua_State* L,
+	struct ctype* ct,
+	const char* name,
+	int type
+) {									// stack: ...
 	memset(ct, 0, sizeof(*ct));
 	ct->type = type;
 
-	pushRegistry(L, &types_key);
-	push_ctype(L, 0, ct);
-	lua_setfield(L, -2, name);
-	lua_pop(L, 1); /* types */
+	pushRegistry(L, &types_key);	// stack: ..., registry[types_key]
+	push_ctype(L, 0, ct);			// stack: ..., registry[types_key], userdata of ct
+	lua_setfield(L, -2, name);		// stack: ..., registry[types_key];  registry[types_key][name] = userdata of ct
+	lua_pop(L, 1);					// stack: ...
 }
 
-static void add_typedef(lua_State* L, const char* from, const char* to)
-{
-	struct ctype ct;
+static void add_typedef(
+	lua_State* L,
+	const char* from,
+	const char* to
+) {									// stack: ...
 	struct parser P;
 	P.line = 1;
 	P.align_mask = DEFAULT_ALIGN_MASK;
 	P.next = P.prev = from;
 
-	pushRegistry(L, &types_key);
-	parse_type(L, &P, &ct);
+	pushRegistry(L, &types_key);	// stack: ..., registry[&types_key]
+	struct ctype ct;
+	parse_type(L, &P, &ct);			// stack: ..., registry[&types_key], ctype uservalue 0
 	parse_argument(L, &P, -1, &ct, NULL, NULL);
-	push_ctype(L, -1, &ct);
+	push_ctype(L, -1, &ct);			// stack: ..., registry[&types_key], ct
 
 	/* stack is at +4: types, type usr, arg usr, ctype */
 
@@ -3316,11 +3342,10 @@ I wonder why this function is separate, it's all only ever called upon luaopen_f
 This initializes the ffi table.
 stack in: registry[ffi_key]
 */
-static int ffiInit(lua_State* L)
-{
+static int ffiInit(lua_State* L) {
 	struct jit* jit = get_jit(L);
 
-	/* jit setup */
+	// jit setup
 	{
 		dasm_init(jit, 64);
 #ifdef _WIN32
@@ -3337,16 +3362,16 @@ static int ffiInit(lua_State* L)
 		compile_globals(jit, L);
 	}
 
-	/* ffi.C */
+	// ffi.C
 	{
 #ifdef _WIN32
 		size_t sz = sizeof(HMODULE) * 6;
 		HMODULE* libs = lua_newuserdata(L, sz);
 		memset(libs, 0, sz);
 
-		/* exe */
+		// exe
 		GetModuleHandle(NULL);
-		/* lua dll */
+		// lua dll
 #ifdef LUA_DLL_NAME
 #define STR2(tok) #tok
 #define STR(tok) STR2(tok)
@@ -3355,7 +3380,7 @@ static int ffiInit(lua_State* L)
 #undef STR2
 #endif
 
-		/* crt */
+		// crt
 #ifdef UNDER_CE
 		libs[2] = LoadLibraryA("coredll.dll");
 #else
@@ -3368,12 +3393,12 @@ static int ffiInit(lua_State* L)
 		jit->lua_dll = libs[1];
 		jit->kernel32_dll = libs[3];
 
-#else /* !_WIN32 */
+#else // !_WIN32
 		size_t sz = sizeof(void*) * 5;
 		void** libs = (void**)lua_newuserdata(L, sz);
 		memset(libs, 0, sz);
 
-		libs[0] = LoadLibraryA(NULL); /* exe */
+		libs[0] = LoadLibraryA(NULL); // exe
 		libs[1] = LoadLibraryA("libc.so");
 #ifdef __GNUC__
 		libs[2] = LoadLibraryA("libgcc.so");
@@ -3382,19 +3407,18 @@ static int ffiInit(lua_State* L)
 		libs[4] = LoadLibraryA("libdl.so");
 #endif
 
-										// stack: ffi, libs userdata of void*[]
-		lua_newtable(L);				// stack: ffi, libs, t={}
-		lua_setuservalue(L, -2);		// stack: ffi, libs;  set libs uservalue 0 to t
+											// stack: ffi, libs userdata of void*[]
+		lua_newtable(L);					// stack: ffi, libs, t={}
+		lua_setuservalue(L, -2);			// stack: ffi, libs;  set libs uservalue 0 to t
 
 		pushRegistry(L, &cmodule_mt_key);	// stack: ffi, libs, registry[cmodule_mt_key]
-		lua_setmetatable(L, -2);		// stack: ffi, libs;  setmetatable(libs, registry[cmodule_mt_key])
+		lua_setmetatable(L, -2);			// stack: ffi, libs;  setmetatable(libs, registry[cmodule_mt_key])
 
-		lua_setfield(L, 1, "C");		// stack: ffi;  ffi.C = libs
+		lua_setfield(L, 1, "C");			// stack: ffi;  ffi.C = libs
 	}
 
-	/* setup builtin types */
+	// setup builtin types
 	{
-		complex_double* pc;
 		struct {char ch; uint16_t v;} a16;
 		struct {char ch; uint32_t v;} a32;
 		struct {char ch; uint64_t v;} a64;
@@ -3411,6 +3435,7 @@ static int ffiInit(lua_State* L)
 		struct {char ch; complex long double v;} cld;
 #endif
 
+		// assign registry[types_key][name] = userdata of the ctype filled out, and for complex types assign a table uservalue to the ctype userdata
 		push_builtin(L, &ct, "void", VOID_TYPE, 0, 0, 0);
 		push_builtin(L, &ct, "bool", BOOL_TYPE, sizeof(_Bool), sizeof(_Bool) -1, 1);
 		push_builtin(L, &ct, "uint8_t", INT8_TYPE, sizeof(uint8_t), 0, 1);
@@ -3438,8 +3463,9 @@ static int ffiInit(lua_State* L)
 		push_builtin_undef(L, &ct, "complex long double", COMPLEX_LONG_DOUBLE_TYPE);
 #endif
 
-		/* add NULL and i constants */
-		pushRegistry(L, &constants_key);
+		// add NULL and i to registry[&constants_key] table, which is one of the many lookups of a module's __index:
+
+		pushRegistry(L, &constants_key);		// stack: ffi, registry[&constants_key]
 
 		memset(&ct, 0, sizeof(ct));
 		ct.type = VOID_TYPE;
@@ -3447,37 +3473,41 @@ static int ffiInit(lua_State* L)
 		ct.pointers = 1;
 		ct.is_null = 1;
 
-		/* add ffi.C.NULL */
-		push_cdata(L, 0, &ct);
-		lua_setfield(L, -2, "NULL");
+		// add ffi.C.NULL
+		push_cdata(L, 0, &ct);					// stack: ffi, registry[&constants_key], userdata cdata<void*>(0)
+		lua_setfield(L, -2, "NULL");			// stack: ffi, registry[&constants_key];  registry[&constants_key].NULL = cdata<void*>(0)
 
-		/* add ffi.NULL */
-		push_cdata(L, 0, &ct);
-		lua_setfield(L, 1, "NULL");
+		// add ffi.NULL
+		push_cdata(L, 0, &ct);					// stack: ffi, registry[&constants_key], userdata cdata<void*>(0)
+		lua_setfield(L, 1, "NULL");				// stack: ffi, registry[&constants_key];  ffi.NULL = cdata<void*>(0)
 
-		/* add ffi.null */
-		push_cdata(L, 0, &ct);
-		lua_setfield(L, 1, "null");
+		// add ffi.C.null
+		push_cdata(L, 0, &ct);					// stack: ffi, registry[&constants_key], userdata cdata<void*>(0)
+		lua_setfield(L, -2, "null");			// stack: ffi, registry[&constants_key];  registry[&cosntants_key].null = cdata<void*>(0)
+
+		// add ffi.null
+		push_cdata(L, 0, &ct);					// stack: ffi, registry[&constants_key], userdata cdata<void*>(0)
+		lua_setfield(L, 1, "null");				// stack: ffi, registry[&constants_key];  ffi.null = cdata<void*>(0)
 
 		memset(&ct, 0, sizeof(ct));
 		ct.type = COMPLEX_DOUBLE_TYPE;
 		ct.is_defined = 1;
 		ct.base_size = sizeof(complex_double);
-		pc = (complex_double*) push_cdata(L, 0, &ct);
+		complex_double * pc = (complex_double*) push_cdata(L, 0, &ct);	// stack: ffi, registry[&constants_key], complex_double(0,1)
 #ifdef HAVE_COMPLEX
 		*pc = 1i;
 #else
 		pc->real = 0;
 		pc->imag = 1;
 #endif
-		lua_setfield(L, -2, "i");
+		lua_setfield(L, -2, "i");				// stack: ffi, registry[*constants_key];  registry[*constants_key].i = complex_double(0,1)
 
-		lua_pop(L, 1); /* constants */
+		lua_pop(L, 1); 							// stack: ffi
 	}
 
-	assert(lua_gettop(L) == 1);
+	assert(lua_gettop(L) == 1);					// stack: ffi
 
-	/* setup builtin typedefs */
+	// setup builtin typedefs
 	{
 		add_typedef(L, "bool", "_Bool");
 
