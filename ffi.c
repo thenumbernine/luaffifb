@@ -7,6 +7,7 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 #include "ffi.h"
+#include "parser.h"
 #include <math.h>
 #include <inttypes.h>
 
@@ -3387,10 +3388,7 @@ static void add_typedef(
 	const char* from,
 	const char* to
 ) {												// stack: ...
-	struct parser P;
-	P.line = 1;
-	P.align_mask = DEFAULT_ALIGN_MASK;
-	P.next = P.prev = from;
+	Parser P = newParser(from);
 
 	pushRegistry(L, &types_key);				// stack: ..., registry[&types_key]
 	CType ct;

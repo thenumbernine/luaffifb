@@ -184,13 +184,6 @@ void (lua_remove)(lua_State *L, int idx);
 
 struct token;
 
-struct parser {
-	int line;
-	const char* next;
-	const char* prev;
-	unsigned align_mask;
-};
-
 struct page {
 	size_t size;
 	size_t off;
@@ -306,7 +299,7 @@ enum {
  * Since this is used as a header for every ctype and cdata, and we create a
  * ton of them on the stack, we try and minimise its size.
  */
-typedef struct CType {
+typedef struct {
 	size_t base_size; /* size of the base type in bytes */
 
 	union {
@@ -362,7 +355,7 @@ But really ... WHYYYY are we using bitfields to STORE A RECURSIVE STRUCTURE.
 #ifdef _MSC_VER
 __declspec(align(16))
 #endif
-typedef struct CData {
+typedef struct {
 	CType type
 #ifdef __GNUC__
 	  __attribute__ ((aligned(16)))
@@ -405,8 +398,6 @@ void* to_cdata(lua_State* L, int idx, CType* ct);
 void* check_cdata(lua_State* L, int idx, CType* ct);
 size_t ctype_size(lua_State* L, const CType* ct);
 
-void parse_type(lua_State* L, struct parser* P, CType* type);
-void parse_argument(lua_State* L, struct parser* P, int ct_usr, CType* type, struct token* name, struct parser* asmname);
 void push_type_name(lua_State* L, int usr, const CType* ct);
 
 int push_user_mt(lua_State* L, int ct_usr, const CType* ct);

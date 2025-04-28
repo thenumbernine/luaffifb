@@ -7,6 +7,7 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 #include "ffi.h"
+#include "parser.h"
 
 static int to_define_key;
 
@@ -235,10 +236,7 @@ void check_ctype(
 	CType * ct	// out
 ) {											// stack: ...
 	if (lua_isstring(L, idx)) {
-		struct parser P;
-		P.line = 1;
-		P.prev = P.next = lua_tostring(L, idx);
-		P.align_mask = DEFAULT_ALIGN_MASK;
+		Parser P = newParser(lua_tostring(L, idx));
 		parse_type(L, &P, ct);						// stack: ..., ct's userdata's uservalue 0
 		parse_argument(L, &P, -1, ct, NULL, NULL);	// stack: ..., ctype uservalue, ... arg uservalue or new ctype uservalue which is it?
 		lua_remove(L, -2); 							// stack: ..., parse_argument returned uservalue
