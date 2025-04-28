@@ -16,7 +16,7 @@
 #define MAX_BRANCH ((INT32_MAX) >> 8)
 #define BRANCH_OFF 4
 
-static void compile_extern_jump(struct jit* jit, lua_State* L, CFunction func, uint8_t* code)
+static void compile_extern_jump(JIT* jit, lua_State* L, CFunction func, uint8_t* code)
 {
     /* The jump code is the function pointer followed by a stub to call the
      * function pointer. The stub exists so we can jump to functions with an
@@ -47,14 +47,14 @@ static void compile_extern_jump(struct jit* jit, lua_State* L, CFunction func, u
 | bl func
 |.endmacro
 
-void compile_globals(struct jit* jit, lua_State* L)
+void compile_globals(JIT* jit, lua_State* L)
 {
     (void) jit;
 }
 
 CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 {
-    struct jit* Dst = get_jit(L);;
+    JIT* Dst = get_jit(L);;
     int i, nargs, num_upvals, ref;
     const CType* mt;
 
@@ -332,7 +332,7 @@ CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 
 void compile_function(lua_State* L, CFunction func, int ct_usr, const CType* ct)
 {
-    struct jit* Dst = get_jit(L);;
+    JIT* Dst = get_jit(L);;
     int i, nargs, num_upvals;
     const CType* mt;
     void* p;

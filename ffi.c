@@ -99,14 +99,14 @@ int equalsRegistry(lua_State* L, int idx, void * key)
 }
 
 /*
-Get the struct jit* userdata of registry[&jit_key].
+Get the JIT* userdata of registry[&jit_key].
 Update the jit->L lua State to the arg passed.
 Leaves the stack the same.
 */
-struct jit* get_jit(lua_State* L) {
-	struct jit* jit;							// stack: ...
+JIT* get_jit(lua_State* L) {
+	JIT* jit;							// stack: ...
 	pushRegistry(L, &jit_key);					// stack: ..., registry[&jit_key]=jit
-	jit = (struct jit*) lua_touserdata(L, -1);
+	jit = (JIT*) lua_touserdata(L, -1);
 	jit->L = L;									// update Lua state
 	lua_pop(L, 1);								// stack: ...
 	return jit;
@@ -2729,7 +2729,7 @@ static int cdata_tostring(lua_State* L)
 
 static int ffi_errno(lua_State* L)
 {
-	struct jit* jit = get_jit(L);
+	JIT* jit = get_jit(L);
 
 	if (!lua_isnoneornil(L, 1)) {
 		lua_pushinteger(L, jit->last_errno);
@@ -3151,7 +3151,7 @@ static int cmodule_newindex(lua_State* L)
 static int jit_gc(lua_State* L)
 {
 	size_t i;
-	struct jit* jit = get_jit(L);
+	JIT* jit = get_jit(L);
 	dasm_free(jit);
 	for (i = 0; i < jit->pagenum; i++) {
 		FreePage(jit->pages[i], jit->pages[i]->size);
@@ -3387,7 +3387,7 @@ This initializes the ffi table.
 stack in: registry[&ffi_key]
 */
 static int ffiInit(lua_State* L) {
-	struct jit* jit = get_jit(L);
+	JIT* jit = get_jit(L);
 
 	// jit setup
 	{
@@ -3713,7 +3713,7 @@ int luaopen_ffi(lua_State* L) {
 	setup_mt(L, cmodule_mt, 0);					// stack: t;  t filled with `cmodule_mt`
 	setRegistry(L, &cmodule_mt_key);			// stack: empty;  registry[cmodule_mt_key]=t
 
-	memset(lua_newuserdata(L, sizeof(struct jit)), 0, sizeof(struct jit)); // stack: u=userdata of struct jit
+	memset(lua_newuserdata(L, sizeof(JIT)), 0, sizeof(JIT)); // stack: u=userdata of JIT
 	lua_newtable(L);							// stack: u, t={}
 	setup_mt(L, jit_mt, 0);						// stack: u, t;  t filled with `jit_mt`
 	lua_setmetatable(L, -2);					// stack: u;  setmetatable(u, t)

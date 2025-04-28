@@ -183,7 +183,7 @@ static const char *const extnames[] = {
 #define MAX_BRANCH INT32_MAX
 #define BRANCH_OFF 4
 
-static void compile_extern_jump(struct jit* jit, lua_State* L, CFunction func, uint8_t* code)
+static void compile_extern_jump(JIT* jit, lua_State* L, CFunction func, uint8_t* code)
 {
     /* The jump code is the function pointer followed by a stub to call the
      * function pointer. The stub exists in 64 bit so we can jump to functions
@@ -209,9 +209,9 @@ static void compile_extern_jump(struct jit* jit, lua_State* L, CFunction func, u
 #endif
 }
 
-void compile_globals(struct jit* jit, lua_State* L)
+void compile_globals(JIT* jit, lua_State* L)
 {
-    struct jit* Dst = jit;
+    JIT* Dst = jit;
     int* perr = &jit->last_errno;
     dasm_setup(Dst, build_actionlist);
 
@@ -487,7 +487,7 @@ CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
     struct reg_alloc reg;
     int num_upvals = 0;
     int top = lua_gettop(L);
-    struct jit* Dst = get_jit(L);
+    JIT* Dst = get_jit(L);
     int ref;
     int hidden_arg_off = 0;
 
@@ -781,7 +781,7 @@ void compile_function(lua_State* L, CFunction func, int ct_usr, const CType* ct)
     size_t i, nargs;
     int num_upvals;
     const CType* mbr_ct;
-    struct jit* Dst = get_jit(L);
+    JIT* Dst = get_jit(L);
     struct reg_alloc reg;
     void* p;
     int top = lua_gettop(L);

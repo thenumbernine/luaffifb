@@ -38,8 +38,8 @@
 #define DASM_CHECKS
 #endif
 
-struct jit;
-#define Dst_DECL	struct jit* Dst
+struct JIT;
+#define Dst_DECL	struct JIT* Dst
 #define Dst_REF		(Dst->ctx)
 
 #include "dynasm/dasm_proto.h"
@@ -140,7 +140,7 @@ EXTERN_C EXPORT int luaopen_ffi(lua_State* L);
 struct Page;		// defined in call.h, used in call.c and ffi.c
 struct DASMState;	// defined in dynasm/dasm_*.h
 
-struct jit {
+typedef struct JIT {
 	lua_State* L;
 	int32_t last_errno;
 	struct DASMState* ctx;
@@ -151,7 +151,7 @@ struct jit {
 	int function_extern;
 	void* lua_dll;
 	void* kernel32_dll;
-};
+} JIT;
 
 #define ALIGN_DOWN(PTR, MASK) \
   (((uintptr_t) (PTR)) & (~ ((uintptr_t) (MASK)) ))
@@ -191,7 +191,7 @@ extern int asmname_key;
 int equalsRegistry(lua_State* L, int idx, void * key);
 void pushRegistry(lua_State* L, void * key);
 void setRegistry(lua_State* L, void * key);
-struct jit* get_jit(lua_State* L);
+JIT* get_jit(lua_State* L);
 
 /* both ctype and cdata are stored as userdatas
  *

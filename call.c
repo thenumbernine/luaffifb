@@ -10,8 +10,8 @@
 
 static CFunction compile(Dst_DECL, lua_State* L, CFunction func, int ref);
 
-static void* reserve_code(struct jit* jit, lua_State* L, size_t sz);
-static void commit_code(struct jit* jit, void* p, size_t sz);
+static void* reserve_code(JIT* jit, lua_State* L, size_t sz);
+static void commit_code(JIT* jit, void* p, size_t sz);
 
 static void push_int(lua_State* L, int val) { lua_pushinteger(L, val); }
 static void push_uint(lua_State* L, unsigned int val) { lua_pushinteger(L, val); }
@@ -48,7 +48,7 @@ struct CallInfo {
 	Value * valueData;
 };
 
-void compile_globals(struct jit* jit, lua_State* L) {}
+void compile_globals(JIT* jit, lua_State* L) {}
 
 static inline ffi_type * getFFITypeForCType(CType const * mbr_ct) {
 	if (mbr_ct->pointers || mbr_ct->is_reference || mbr_ct->type == INTPTR_TYPE) {
@@ -218,17 +218,17 @@ void compile_function(lua_State* L, CFunction func, int ct_usr, const CType* ct)
 #include "call_x86.h"
 #endif
 
-struct jit_head {
+typedef struct JIT_head {
 	size_t size;
 	int ref;
 	uint8_t jump[JUMP_SIZE];
-};
+} JIT_head;
 
 #define LINKTABLE_MAX_SIZE (sizeof(extnames) / sizeof(extnames[0]) * (JUMP_SIZE))
 
-static CFunction compile(struct jit* jit, lua_State* L, CFunction func, int ref)
+static CFunction compile(JIT* jit, lua_State* L, CFunction func, int ref)
 {
-	struct jit_head* code;
+	JIT_head* code;
 	size_t codesz;
 	int err;
 
@@ -239,8 +239,8 @@ static CFunction compile(struct jit* jit, lua_State* L, CFunction func, int ref)
 		luaL_error(L, "dasm_link error %s", buf);
 	}
 
-	codesz += sizeof(struct jit_head);
-	code = (struct jit_head*) reserve_code(jit, L, codesz);
+	codesz += sizeof(JIT_head);
+	code = (JIT_head*) reserve_code(jit, L, codesz);
 	code->ref = ref;
 	code->size = codesz;
 	compile_extern_jump(jit, L, func, code->jump);
@@ -258,11 +258,11 @@ static CFunction compile(struct jit* jit, lua_State* L, CFunction func, int ref)
 
 typedef uint8_t jump_t[JUMP_SIZE];
 
-int get_extern(struct jit* jit, uint8_t* addr, int idx, int type)
+int get_extern(JIT* jit, uint8_t* addr, int idx, int type)
 {
 	Page* page = jit->pages[jit->pagenum-1];
 	jump_t* jumps = (jump_t*) (page+1);
-	struct jit_head* h = (struct jit_head*) ((uint8_t*) page + page->off);
+	JIT_head* h = (JIT_head*) ((uint8_t*) page + page->off);
 	uint8_t* jmp;
 	ptrdiff_t off;
 
@@ -287,7 +287,7 @@ int get_extern(struct jit* jit, uint8_t* addr, int idx, int type)
 	}
 }
 
-static void* reserve_code(struct jit* jit, lua_State* L, size_t sz)
+static void* reserve_code(JIT* jit, lua_State* L, size_t sz)
 {
 	size_t off = (jit->pagenum > 0) ? jit->pages[jit->pagenum-1]->off : 0;
 	size_t size = (jit->pagenum > 0) ? jit->pages[jit->pagenum-1]->size : 0;
@@ -385,7 +385,7 @@ static void* reserve_code(struct jit* jit, lua_State* L, size_t sz)
 	return (uint8_t*) page + page->off;
 }
 
-static void commit_code(struct jit* jit, void* code, size_t sz)
+static void commit_code(JIT* jit, void* code, size_t sz)
 {
 	Page* page = jit->pages[jit->pagenum-1];
 	page->off += sz;
@@ -404,14 +404,14 @@ static void commit_code(struct jit* jit, void* code, size_t sz)
  */
 void push_func_ref(lua_State* L, CFunction func)
 {
-	struct jit_head* h = ((struct jit_head*) func) - 1;
+	JIT_head* h = ((JIT_head*) func) - 1;
 	lua_rawgeti(L, LUA_REGISTRYINDEX, h->ref);
 }
 
-void free_code(struct jit* jit, lua_State* L, CFunction func)
+void free_code(JIT* jit, lua_State* L, CFunction func)
 {
 	size_t i;
-	struct jit_head* h = ((struct jit_head*) func) - 1;
+	JIT_head* h = ((JIT_head*) func) - 1;
 	for (i = 0; i < jit->pagenum; i++) {
 		Page* p = jit->pages[i];
 
