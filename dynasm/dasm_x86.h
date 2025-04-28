@@ -4,6 +4,7 @@
 ** Released under the MIT/X license. See dynasm.lua for full copyright notice.
 */
 
+#include "../call.h"	//DASM_EXTERN & get_extern
 #include <stddef.h>
 #include <stdarg.h>
 #include <string.h>

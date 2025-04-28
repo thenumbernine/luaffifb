@@ -9,6 +9,8 @@
 #include "ffi.h"
 #include "ctype.h"
 #include "parser.h"
+#include "ffi_complex.h"
+#include "call.h"
 #include <math.h>
 #include <inttypes.h>
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "ffi.h"
-#include "types.h"
+#include "ffi.h"	// CType
+#include "types.h"	// CFunction
 
 void set_defined(lua_State* L, int ct_usr, CType* ct);
 

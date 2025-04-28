@@ -53,7 +53,6 @@ extern "C" {
 struct jit;
 #define Dst_DECL	struct jit* Dst
 #define Dst_REF		(Dst->ctx)
-#define DASM_EXTERN(a,b,c,d) get_extern(a,b,c,d)
 
 #include "dynasm/dasm_proto.h"
 
@@ -373,13 +372,7 @@ int push_user_mt(lua_State* L, int ct_usr, const CType* ct);
 
 int ffi_cdef(lua_State* L);
 
-void push_func_ref(lua_State* L, CFunction func);
-void free_code(struct jit* jit, lua_State* L, CFunction func);
 int x86_return_size(lua_State* L, int usr, const CType* ct);
-void compile_function(lua_State* L, CFunction f, int ct_usr, const CType* ct);
-CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct);
-void compile_globals(struct jit* jit, lua_State* L);
-int get_extern(struct jit* jit, uint8_t* addr, int idx, int type);
 
 // WARNING: assembly needs to be updated for prototype changes of these functions
 int check_bool(lua_State* L, int idx);
