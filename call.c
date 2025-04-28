@@ -164,6 +164,7 @@ void compile_function(
 	int ct_usr,					// CType uservalue ... what are these used for again?  "usr" for the uservalue doesn't lend much of an explanation ...
 	const CType * ct
 ) {								// stack: ...
+printf("compile_function begin top=%d\n", lua_gettop(L));	
 	int top = lua_gettop(L);
 	ct_usr = lua_absindex(L, ct_usr);
 
@@ -200,8 +201,7 @@ void compile_function(
 	lua_pop(L, 1);
 
 	// push the ffi_cif
-	lua_pushvalue(L, ct_usr);
-	CallInfo * callInfo = (CallInfo*)lua_newuserdata(L, sizeof(CallInfo));
+	CallInfo * callInfo = (CallInfo*)lua_newuserdata(L, sizeof(CallInfo));	// stack: ..., p, CallInfo
 	callInfo->func = func;
 	callInfo->nargs = nargs;
 	callInfo->valueData = (Value*)malloc(sizeof(Value) * nargs);
@@ -215,10 +215,15 @@ void compile_function(
 		luaL_error(L, "ffi_prep_cif failed with %d", prepResult);
 	}
 
-	// so when __call on the CData of a CFunction happens it had better match spec
-	// so what is that spec?
+	/* 
+	so when __call on the CData of a CFunction happens it had better match spec
+	so what is that spec?
+	cdata_call should show us ...
+	... userdata 1 is left from check_cdata
+	*/
 
-	lua_pushcclosure(L, (lua_CFunction)func, 0);
+	lua_pushcclosure(L, (lua_CFunction)func, 2);	// stack: ..., func
+printf("compile_function end top=%d\n", lua_gettop(L));	
 }
 
 // stub functions

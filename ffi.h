@@ -86,7 +86,7 @@ EXTERN_C EXPORT int luaopen_ffi(lua_State* L);
 
 
 // enable this to skip out on JIT-based calling and use libffi instead
-#define CALL_WITH_LIBFFI
+//#define CALL_WITH_LIBFFI
 
 
 #ifdef _WIN32

@@ -211,14 +211,19 @@ void * push_cdata(
 	return cd+1;
 }
 
-void push_callback(lua_State* L, CFunction luafunc, CFunction cfunc)
-{
-	CFunction* pf = (CFunction*) lua_newuserdata(L, 2 * sizeof(CFunction));
+// Pushes onto the stack a userdata of CFunction[2]={luafunc, cfunc} with metatable registry[&callback_mt]
+void push_callback(
+	lua_State * L,
+	CFunction luafunc,
+	CFunction cfunc
+) {										// stack: ...
+	CFunction * pf = (CFunction *)lua_newuserdata(L, 2 * sizeof(CFunction));
+										// stack: ..., pf = userdata of CFunction[2]
 	pf[0] = luafunc;
 	pf[1] = cfunc;
 
-	pushRegistry(L, &callback_mt_key);
-	lua_setmetatable(L, -2);
+	pushRegistry(L, &callback_mt_key);	// stack: ..., pf, registry[&callback_mt_key]
+	lua_setmetatable(L, -2);			// stack: ..., pf;  setmetatable(pf, registry[&callback_mt_key])
 }
 
 /*

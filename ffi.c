@@ -1564,28 +1564,35 @@ static int cdata_call(
 	}
 
 	lua_pushvalue(L, 1);					// stack: f, ..., f_uv, f
-	lua_rawget(L, lua_upvalueindex(1));		// stack: f, ..., f_uv, f's upvalue ... zero? one?
+	lua_rawget(L, lua_upvalueindex(1));		// stack: f, ..., f_uv, closure = f_uv[f]
+	// Why use rawget(upvalueindex(1)) when the upvalueindex(1) is already on the stack from check_cdata ? 
+	// Does this mean a CData of a module C function has uservalue 1 = a table which, 
+	//  for key of that CData userdata, the value is the lua_CFunction to call?
 
+	// If the "closure" lua_CFunction associated with this CData-function is not present then generate it with compile_function()
+	
+	// WAIT NO I WAS WRONG, cmodule_index AND cdata_call ARE TWO FULLY SEPARATE SCHEMES OF UPVALUES...
+	// WHAT A GIANT PIECE OF SHIT CODEBASE THIS IS, AND WHO EVER THOUGHT OF MAKING IT IN SUCH A MESSY PIECE OF SHIT WAY?
 	if (!lua_isfunction(L, -1)) {
-		lua_pop(L, 1);
-		compile_function(L, *p, -1, &ct);
+		lua_pop(L, 1);						// stack: f, ..., f_uv
+		compile_function(L, *p, -1, &ct);	// stack: f, ..., f_uv, some kind of lua_CFunction which the comments call "closure" as if that word hasn't been used a zillion times already
 
-		assert(lua_gettop(L) == top + 2); // uv, closure 
+		assert(lua_gettop(L) == top + 2); 	// stack: f, ..., f_uv, closure
 
 		// closures[func] = closure 
-		lua_pushvalue(L, 1);
-		lua_pushvalue(L, -2);
-		lua_rawset(L, lua_upvalueindex(1));
+		lua_pushvalue(L, 1);				// stack: f, ..., f_uv, closure, f
+		lua_pushvalue(L, -2);				// stack: f, ..., f_uv, closure, f, closure
+		lua_rawset(L, lua_upvalueindex(1));	// stack: f, ..., f_uv, closure;  f_uv[f] = closure
 
-		lua_replace(L, 1);
+		lua_replace(L, 1);					// stack: closure, ..., f_uv
 	} else {
-		lua_replace(L, 1);
+		lua_replace(L, 1);					// stack: closure, ..., f_uv
 	}
 
-	lua_pop(L, 1); // uv 
+	lua_pop(L, 1);							// stack: closure, ...
 	assert(lua_gettop(L) == top);
 
-	lua_call(L, lua_gettop(L) - 1, LUA_MULTRET);
+	lua_call(L, lua_gettop(L) - 1, LUA_MULTRET);	// stack: closure(...)'s results...
 	return lua_gettop(L);
 }
 
@@ -3058,15 +3065,15 @@ static int cmodule_index(
 	assert(lua_gettop(L) == 3); 		// stack: module, key, ct_usr
 
 	if (ct.type == FUNCTION_TYPE) {
-		compile_function(L, (CFunction) sym, -1, &ct); 	// stack: module, key, ct_usr, function 
+		compile_function(L, (CFunction)sym, -1, &ct); 	// stack: module, key, ct_usr, closure_lua_CFunction
 		assert(lua_gettop(L) == 4);
 
-		// set module uservalue[luaname] = function to cache for next time 
-		lua_getuservalue(L, 1);			// stack: module, key, ct_usr, function, module_uv = module uservalue 1
-		lua_pushvalue(L, 2);			// stack: module, key, ct_usr, function, module_uv, key
-		lua_pushvalue(L, -3);			// stack: module, key, ct_usr, function, module_uv, key, function
-		lua_rawset(L, -3);				// stack: module, key, ct_usr, function, module_uv;  module_uv[key] = function
-		lua_pop(L, 1); 					// stack: module, key, ct_usr, function
+		// Set module_uv[key] = closure_lua_CFunction
+		lua_getuservalue(L, 1);			// stack: module, key, ct_usr, closure_lua_CFunction, module_uv = module uservalue 1
+		lua_pushvalue(L, 2);			// stack: module, key, ct_usr, closure_lua_CFunction, module_uv, key
+		lua_pushvalue(L, -3);			// stack: module, key, ct_usr, closure_lua_CFunction, module_uv, key, closure_lua_CFunction
+		lua_rawset(L, -3);				// stack: module, key, ct_usr, closure_lua_CFunction, module_uv;  module_uv[key] = closure_lua_CFunction
+		lua_pop(L, 1); 					// stack: module, key, ct_usr, closure_lua_CFunction
 		return 1;
 	}
 
