@@ -23,6 +23,10 @@ CFLAGS+= -fPIC
 CFLAGS+= -Wall
 LDFLAGS+= -dynamiclib -undefined dynamic_lookup -flat_namespace
 
+LIBFFI_DIR=/usr/local/Cellar/libffi/3.4.8
+CFLAGS+= -I$(LIBFFI_DIR)/include/
+LDFLAGS+= -L$(LIBFFI_DIR)/lib/ -lffi
+
 #if it's debug
 #CFLAGS+= -O0 -gdwarf-2 -mfix-and-continue
 

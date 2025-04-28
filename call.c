@@ -6,35 +6,13 @@
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  */
+
 #include "ffi.h"
 #include "call.h"
 
 // has DASM_CHECKS in it which sometimes is used by the dynasm/dasc_*.h files included below
+// also has prototypes for dasm_init/dasm_free which the CALL_WITH_LIBFFI provides stub functions for
 #include "dynasm/dasm_proto.h"
-
-// has to be here to define DASM_M_GROW & DASM_M_FREE
-// has to have call.h before it in order to define Dst_DECL & Dst_REF
-#include "dynasm/dasm_internal.h"
-
-static CFunction compile(Dst_DECL, lua_State* L, CFunction func, int ref);
-
-static void* reserve_code(JIT* jit, lua_State* L, size_t sz);
-static void commit_code(JIT* jit, void* p, size_t sz);
-
-static void push_int(lua_State* L, int val) { lua_pushinteger(L, val); }
-static void push_uint(lua_State* L, unsigned int val) { lua_pushinteger(L, val); }
-static void push_float(lua_State* L, float val) { lua_pushnumber(L, val); }
-
-#ifndef _WIN32
-static int GetLastError(void) { return errno; }
-static void SetLastError(int err) { errno = err; }
-#endif
-
-#ifdef NDEBUG
-#define shred(a,b,c)
-#else
-#define shred(p,s,e) memset((uint8_t*)(p)+(s),0xCC,(e)-(s))
-#endif
 
 /*
 Get the JIT* userdata of registry[&jit_key].
@@ -51,29 +29,35 @@ JIT* get_jit(lua_State* L) {
 }
 
 
-#ifdef __wasm__
+#if defined(CALL_WITH_LIBFFI)
+
+// Put this in a "dynasm/dasm_wasm.h" / "call_wasm.h" to be like the other.
+// But really, this is going to be the libffi-based calling mechanism, which will work on any OS/ARCH
 
 // wasm libffi compile_ goes here, not somewhere else, cuz I want to generate a diff patch
 #include <ffi.h>
 
-union Value {
+typedef union Value {
 	float f;
 	double d;
 	void * p;
 	int64_t i;
-};
+} Value;
 
-struct CallInfo {
+typedef struct CallInfo {
 	ffi_cif cif;
 	CFunction func;
 	int nargs;
 	void ** valuePtrs;	//allocated upon creation, size nargs, points into valueData
 	Value * valueData;
-};
+} CallInfo;
 
 void compile_globals(JIT* jit, lua_State* L) {}
 
-static inline ffi_type * getFFITypeForCType(CType const * mbr_ct) {
+static inline ffi_type * getFFITypeForCType(
+	lua_State * L,			// only used for luaL_error
+	CType const * mbr_ct
+) {
 	if (mbr_ct->pointers || mbr_ct->is_reference || mbr_ct->type == INTPTR_TYPE) {
 		return &ffi_type_pointer;
 	}
@@ -84,14 +68,15 @@ static inline ffi_type * getFFITypeForCType(CType const * mbr_ct) {
 	case COMPLEX_FLOAT_TYPE: return &ffi_type_complex_float;
 	case COMPLEX_DOUBLE_TYPE: return &ffi_type_complex_double;
 	case VOID_TYPE: return &ffi_type_void;
-	case BOOL_TYPE: return &ffi_type_int8;
+	case BOOL_TYPE: return &ffi_type_sint8;
 	case INT8_TYPE: return mbr_ct->is_unsigned ? &ffi_type_uint8 : &ffi_type_sint8;
 	case INT16_TYPE: return mbr_ct->is_unsigned ? &ffi_type_uint16 : &ffi_type_sint16;
 	case INT32_TYPE: return mbr_ct->is_unsigned ? &ffi_type_uint32 : &ffi_type_sint32;
 	case FLOAT_TYPE: return &ffi_type_float;
 	case DOUBLE_TYPE: return &ffi_type_double;
-	default:
+	default: 
 		luaL_error(L, "NYI: call return type");
+		return NULL;
 	}
 }
 
@@ -101,10 +86,8 @@ upvalues:
 #1: whatever ct_usr is (the first upvalue of cdata_call?)
 #2: CallInfo userdata
 */
-static void call_ffi(lua_State *L) {
+static int call_ffi(lua_State *L) {
 	int ct_usr = lua_upvalueindex(1);
-
-#error TODO looks like I need to have the values[] point at the value itself, which I need to store somewhere else
 
 	// get closure arg #1 as the ffi_cif
 	CallInfo * callInfo = (CallInfo*)lua_touserdata(L, lua_upvalueindex(2));
@@ -115,18 +98,14 @@ static void call_ffi(lua_State *L) {
 		const CType * mbr_ct = (const CType*) lua_touserdata(L, -1);
 
 		if (mbr_ct->pointers || mbr_ct->is_reference || mbr_ct->type == INTPTR_TYPE) {
-			callInfo->valueData[i-1].i = cast_int64(L, i, 0);
+			callInfo->valueData[i-1].i = check_int64(L, i);
 		} else {
 			switch (mbr_ct->type) {
 			case FUNCTION_PTR_TYPE:
-				callInfo->valueData[i-1].i = cast_int64(L, i, 0);
+				callInfo->valueData[i-1].i = check_int64(L, i);
 				break;
 			case ENUM_TYPE:
-				if (mbr_ct->is_unsigned) {
-					callInfo->valueData[i-1].i = cast_uint32(L, i);
-				} else {
-					callInfo->valueData[i-1].i = cast_int32(L, i);
-				}
+				callInfo->valueData[i-1].i = check_int32(L, i);
 				break;
 			case COMPLEX_FLOAT_TYPE:
 				callInfo->valueData[i-1].i = check_complex_float(L, i);
@@ -135,16 +114,16 @@ static void call_ffi(lua_State *L) {
 				callInfo->valueData[i-1].i = check_complex_double(L, i);
 				break;
 			case BOOL_TYPE:
-				callInfo->valueData[i-1].i = (cast_int64(L, idx, !check_pointers) != 0);
+				callInfo->valueData[i-1].i = (check_int64(L, i) != 0);
 				break;
 			case INT8_TYPE:
 			case INT16_TYPE:
 			case INT32_TYPE:
 			case INT64_TYPE:
 				if (mbr_ct->is_unsigned) {
-					callInfo->valueData[i-1].i = cast_uint64(L, i, 0);
+					callInfo->valueData[i-1].i = check_uint64(L, i);
 				} else {
-					callInfo->valueData[i-1].i = cast_int64(L, i, 0);
+					callInfo->valueData[i-1].i = check_int64(L, i);
 				}
 				break;
 			case FLOAT_TYPE:
@@ -163,14 +142,16 @@ static void call_ffi(lua_State *L) {
 
 	// do the call
 	void *ret = {};
-	ffi_call(callInfo->cif, callInfo->func, &ret, callInfo->valuePtrs);
+	ffi_call(&callInfo->cif, callInfo->func, &ret, callInfo->valuePtrs);
 
 	// TODO translate the Lua result to C result
+
+	return 0;
 }
 
 CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct) {
 	luaL_error(L, "TODO compile_callback");
-	return {};
+	return (CFunction)NULL;
 }
 
 void compile_function(lua_State* L, CFunction func, int ct_usr, const CType* ct) {
@@ -196,7 +177,7 @@ void compile_function(lua_State* L, CFunction func, int ct_usr, const CType* ct)
 	for (int i = 1; i <= nargs; i++) {
 		lua_rawgeti(L, ct_usr, i);
 		const CType * mbr_ct = (const CType*) lua_touserdata(L, -1);
-		argFFITypes[i-1] = getFFITypeForCType(mbr_ct);
+		argFFITypes[i-1] = getFFITypeForCType(L, mbr_ct);
 		lua_pop(L, 1);
 	}
 
@@ -204,11 +185,11 @@ void compile_function(lua_State* L, CFunction func, int ct_usr, const CType* ct)
 	const CType * mbr_ct = (const CType*) lua_touserdata(L, -1);
 	lua_pop(L, 1);
 
-	ffi_type * retFFIType = getFFITypeForCType(mbr_ct);
+	ffi_type * retFFIType = getFFITypeForCType(L, mbr_ct);
 
 	// push the ffi_cif
 	lua_pushvalue(L, ct_usr);
-	CallInfo * callinfo = (CallInfo*)lua_newuserdata(L, sizeof(CallInfo));
+	CallInfo * callInfo = (CallInfo*)lua_newuserdata(L, sizeof(CallInfo));
 	callInfo->func = func;
 	callInfo->nargs = nargs;
 	callInfo->valueData = (Value*)malloc(sizeof(Value) * nargs);
@@ -227,7 +208,50 @@ void compile_function(lua_State* L, CFunction func, int ct_usr, const CType* ct)
 	lua_pushcclosure(L, call_ffi, 2);
 }
 
-#elif defined _WIN64
+DASM_FDEF void dasm_init(Dst_DECL, int maxsection) {}
+DASM_FDEF void dasm_free(Dst_DECL) {}
+DASM_FDEF void dasm_setupglobal(Dst_DECL, void **gl, unsigned int maxgl) {}
+DASM_FDEF int dasm_link(Dst_DECL, size_t *szp) { return 0; }	// 0 aka DASM_S_OK
+
+
+/* push_func_ref pushes a copy of the upval table embedded in the compiled
+ * function func.
+ */
+void push_func_ref(lua_State* L, CFunction func) {
+	luaL_error(L, "TODO push_func_ref");
+}
+
+void free_code(JIT* jit, lua_State* L, CFunction func) {}
+
+#else	// defined(CALL_WITH_LIBFFI)
+
+// has to be here to define DASM_M_GROW & DASM_M_FREE
+// has to have call.h before it in order to define Dst_DECL & Dst_REF
+#include "dynasm/dasm_internal.h"
+
+static CFunction compile(Dst_DECL, lua_State* L, CFunction func, int ref);
+
+static void* reserve_code(JIT* jit, lua_State* L, size_t sz);
+static void commit_code(JIT* jit, void* p, size_t sz);
+
+static void push_int(lua_State* L, int val) { lua_pushinteger(L, val); }
+static void push_uint(lua_State* L, unsigned int val) { lua_pushinteger(L, val); }
+static void push_float(lua_State* L, float val) { lua_pushnumber(L, val); }
+
+#ifndef _WIN32
+static int GetLastError(void) { return errno; }
+static void SetLastError(int err) { errno = err; }
+#endif
+
+#ifdef NDEBUG
+#define shred(a,b,c)
+#else
+#define shred(p,s,e) memset((uint8_t*)(p)+(s),0xCC,(e)-(s))
+#endif
+
+
+
+#if defined _WIN64
 #include "dynasm/dasm_x86.h"
 #include "call_x64win.h"
 #elif defined __amd64__
@@ -462,3 +486,5 @@ void free_code(JIT* jit, lua_State* L, CFunction func)
 
 	assert(!"couldn't find func in the jit pages");
 }
+
+#endif	// defined(CALL_WITH_LIBFFI)
