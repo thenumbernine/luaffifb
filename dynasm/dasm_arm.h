@@ -5,6 +5,7 @@
 */
 
 #include "../call.h"	//DASM_EXTERN & get_extern
+#include "dasm_proto.h"
 #include <stddef.h>
 #include <stdarg.h>
 #include <string.h>

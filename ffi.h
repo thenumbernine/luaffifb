@@ -38,12 +38,6 @@
 #define DASM_CHECKS
 #endif
 
-struct JIT;
-#define Dst_DECL	struct JIT* Dst
-#define Dst_REF		(Dst->ctx)
-
-#include "dynasm/dasm_proto.h"
-
 #if defined LUA_FFI_BUILD_AS_DLL
 # define EXPORT __declspec(dllexport)
 #elif defined __GNUC__
@@ -313,9 +307,7 @@ typedef struct {
 	  ;
 } CData;
 
-#include "types.h"
-
-#define CALLBACK_FUNC_USR_IDX 1
+#include "types.h"	// CFunction
 
 void push_type_name(lua_State* L, int usr, const CType* ct);
 
@@ -336,6 +328,7 @@ int32_t check_int32(lua_State* L, int idx);
 uint32_t check_uint32(lua_State* L, int idx);
 uintptr_t check_uintptr(lua_State* L, int idx);
 int32_t check_enum(lua_State* L, int idx, int to_usr, const CType* tt);
+
 // these two will always push a value so that we can create structs/functions on the fly
 void* check_typed_pointer(lua_State* L, int idx, int to_usr, const CType* tt);
 CFunction check_typed_cfunction(lua_State* L, int idx, int to_usr, const CType* tt);

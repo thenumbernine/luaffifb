@@ -7,6 +7,11 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 #include "ffi.h"
+#include "call.h"
+
+// has to be here to define DASM_M_GROW & DASM_M_FREE
+// has to have call.h before it in order to define Dst_DECL & Dst_REF
+#include "dynasm/dasm_internal.h"
 
 static CFunction compile(Dst_DECL, lua_State* L, CFunction func, int ref);
 

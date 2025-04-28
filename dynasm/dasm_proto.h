@@ -4,43 +4,16 @@
 ** Released under the MIT/X license. See dynasm.lua for full copyright notice.
 */
 
+// Now this file contains functions seen by other .c files like ffi.c, but not stuff specific to call.c's dynasm/dasm_*.h
+
 #ifndef _DASM_PROTO_H
 #define _DASM_PROTO_H
 
 #include <stddef.h>
 #include <stdarg.h>
 
-#define DASM_IDENT	"DynASM 1.3.0"
-#define DASM_VERSION	10300	/* 1.3.0 */
-
-#ifndef Dst_DECL
-#define Dst_DECL	DASMState **Dst
-#endif
-
-#ifndef Dst_REF
-#define Dst_REF		(*Dst)
-#endif
-
 #ifndef DASM_FDEF
 #define DASM_FDEF	extern
-#endif
-
-#ifndef DASM_M_GROW
-#define DASM_M_GROW(ctx, t, p, sz, need) \
-  do { \
-    size_t _sz = (sz), _need = (need); \
-    if (_sz < _need) { \
-      if (_sz < 16) _sz = 16; \
-      while (_sz < _need) _sz += _sz; \
-      (p) = (t *)realloc((p), _sz); \
-      if ((p) == NULL) exit(1); \
-      (sz) = _sz; \
-    } \
-  } while(0)
-#endif
-
-#ifndef DASM_M_FREE
-#define DASM_M_FREE(ctx, p, sz)	free(p)
 #endif
 
 // Initialize and free DynASM state. 

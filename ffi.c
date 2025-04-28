@@ -11,6 +11,7 @@
 #include "parser.h"
 #include "ffi_complex.h"
 #include "call.h"
+#include "dynasm/dasm_proto.h"
 #include <math.h>
 #include <inttypes.h>
 
