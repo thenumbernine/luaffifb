@@ -220,36 +220,45 @@ void push_callback(lua_State* L, cfunction luafunc, cfunction cfunc)
 	lua_setmetatable(L, -2);
 }
 
-/* returns the value as a ctype, pushes the user value onto the stack */
-void check_ctype(lua_State* L, int idx, struct ctype* ct)
-{
+/*
+Looks at the stack index `idx`,
+If it's a string then parses it.
+If it's a ctype or cdata metatable then uses the associated ctype.
+Writes the ctype to `ct`.
+Pushes the ctype's uservalue 0 onto the stack ...
+... for ctype, this is some weird arg, either {} for complex or nil
+... for cdata, what is this?
+And how come it's casting cdata_mt_key's as struct ctype?
+*/
+void check_ctype(
+	lua_State* L,
+	int idx,
+	struct ctype * ct	// out
+) {											// stack: ...
 	if (lua_isstring(L, idx)) {
 		struct parser P;
 		P.line = 1;
 		P.prev = P.next = lua_tostring(L, idx);
 		P.align_mask = DEFAULT_ALIGN_MASK;
-		parse_type(L, &P, ct);
-		parse_argument(L, &P, -1, ct, NULL, NULL);
-		lua_remove(L, -2); /* remove the user value from parse_type */
-
-	} else if (lua_getmetatable(L, idx)) {
-		if (!equalsRegistry(L, -1, &ctype_mt_key)
-			&& !equalsRegistry(L, -1, &cdata_mt_key)
-		) {
-			goto err;
-		}
-
-		lua_pop(L, 1); /* pop the metatable */
-		*ct = *(struct ctype*) lua_touserdata(L, idx);
-		lua_getuservalue(L, idx);
-
-	} else {
-		goto err;
+		parse_type(L, &P, ct);						// stack: ..., ct's userdata's uservalue 0
+		parse_argument(L, &P, -1, ct, NULL, NULL);	// stack: ..., ctype uservalue, ... arg uservalue or new ctype uservalue which is it?
+		lua_remove(L, -2); 							// stack: ..., parse_argument returned uservalue
+		return;
 	}
 
-	return;
+	if (lua_getmetatable(L, idx)
+		&& (
+			equalsRegistry(L, -1, &ctype_mt_key)
+			|| equalsRegistry(L, -1, &cdata_mt_key)
+		)
+	) {													// stack: ..., getmetatable(stack[idx])
+		lua_pop(L, 1); 									// stack: ... 
+		// wait ... if it's a cdata ... then treat its userdata as a struct type ... why?
+		*ct = *(struct ctype*)lua_touserdata(L, idx);	// stack: ...
+		lua_getuservalue(L, idx);						// stack: ..., stack[idx]'s usrvalue 0
+		return;
+	}
 
-err:
 	luaL_error(L, "expected cdata, ctype or string for arg #%d", idx);
 }
 
@@ -260,6 +269,8 @@ that ct->type is INVALID_TYPE, a nil is pushed, and NULL is returned.
 */
 void * to_cdata(lua_State* L, int idx, struct ctype* ct) {
 													// stack: ...
+	// If we always returned cd+1 instead of dereferencing it for references, pointers, and arrays,
+	// then the result of NULL can determine non-cdata, and this memset can be skipped for non-cdata values.
 	memset(ct, 0, sizeof(struct ctype));
 	if (!lua_isuserdata(L, idx) || !lua_getmetatable(L, idx)) {
 		lua_pushnil(L);								// stack: ..., nil
@@ -290,9 +301,12 @@ void * to_cdata(lua_State* L, int idx, struct ctype* ct) {
 check_cdata returns the struct cdata* and pushes the user value onto the stack.
 Also dereferences references. 
 */
-void* check_cdata(lua_State* L, int idx, struct ctype* ct)
-{
-	void* p = to_cdata(L, idx, ct);
+void * check_cdata(
+	lua_State * L,
+	int idx,
+	struct ctype * ct
+) {											// stack: ...
+	void * p = to_cdata(L, idx, ct);		// stack: ..., stack[idx]'s uservalue 0 if it is a cdata, nil otherwise
 	if (ct->type == INVALID_TYPE) {
 		luaL_error(L, "expected cdata for arg #%d", idx);
 	}
