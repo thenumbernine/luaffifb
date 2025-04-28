@@ -294,7 +294,7 @@ static int parse_enum(lua_State* L, struct parser* P, struct ctype* type)
         assert(lua_gettop(L) == ct_usr + 1);
 
         /* add the enum value to the constants table */
-        push_upval(L, &constants_key);
+        pushRegistry(L, &constants_key);
         lua_pushvalue(L, -2);
         lua_pushinteger(L, value);
         lua_rawset(L, -3);
@@ -732,7 +732,7 @@ static int parse_record(lua_State* L, struct parser* P, struct ctype* ct)
         assert(lua_gettop(L) == top+1);
 
         /* lookup the name to see if we've seen this type before */
-        push_upval(L, &types_key);
+        pushRegistry(L, &types_key);
         lua_pushvalue(L, -2);
         lua_rawget(L, top+2);
 
@@ -792,13 +792,13 @@ static int parse_record(lua_State* L, struct parser* P, struct ctype* ct)
         int num;
 
         /* get the next unnamed number */
-        push_upval(L, &next_unnamed_key);
+        pushRegistry(L, &next_unnamed_key);
         num = lua_tointeger(L, -1);
         lua_pop(L, 1);
 
         /* increment the unnamed upval */
         lua_pushinteger(L, num + 1);
-        set_upval(L, &next_unnamed_key);
+        setRegistry(L, &next_unnamed_key);
 
         lua_newtable(L); /* the new usr table - leave on stack */
 
@@ -1237,7 +1237,7 @@ int parse_type(lua_State* L, struct parser* P, struct ctype* ct)
         put_back(P);
 
         /* lookup type */
-        push_upval(L, &types_key);
+        pushRegistry(L, &types_key);
         parse_type_name(L, P);
         lua_rawget(L, -2);
         lua_remove(L, -2);
@@ -1794,7 +1794,7 @@ static void find_canonical_usr(lua_State* L, int ct_usr, const struct ctype *ct)
     assert(top == lua_gettop(L));
 
     /* look up the type string in the types table */
-    push_upval(L, &types_key);
+    pushRegistry(L, &types_key);
     types = lua_gettop(L);
 
     push_function_type_strings(L, ct_usr, ct);
@@ -1900,7 +1900,7 @@ static void parse_typedef(lua_State* L, struct parser* P)
             luaL_error(L, "Can't typedef a variable length array on line %d", P->line);
         }
 
-        push_upval(L, &types_key);
+        pushRegistry(L, &types_key);
         lua_pushlstring(L, name.str, name.size);
         push_ctype(L, -3, &arg_type);
         lua_rawset(L, -3);
@@ -2023,7 +2023,7 @@ static void parse_constant_assignemnt(lua_State* L,
 
     check_token(L, P, TOK_SEMICOLON, "", "expected ; after constant definition on line %d", P->line);
 
-    push_upval(L, &constants_key);
+    pushRegistry(L, &constants_key);
     lua_pushlstring(L, name->str, name->size);
 
     switch (type->type) {
@@ -2139,14 +2139,14 @@ static int parse_root(lua_State* L, struct parser* P)
 
                     /* set asmname_tbl[name] = asmname */
                     if (asmname.next) {
-                        push_upval(L, &asmname_key);
+                        pushRegistry(L, &asmname_key);
                         lua_pushlstring(L, name.str, name.size);
                         push_strings(L, &asmname);
                         lua_rawset(L, -3);
                         lua_pop(L, 1); /* asmname upval */
                     }
 
-                    push_upval(L, &functions_key);
+                    pushRegistry(L, &functions_key);
                     lua_pushlstring(L, name.str, name.size);
                     push_ctype(L, -3, &type);
                     lua_rawset(L, -3);
@@ -2292,7 +2292,7 @@ static int64_t calculate_constant1(lua_State* L, struct parser* P, struct token*
 
     } else if (tok->type == TOK_TOKEN) {
         /* look up name in constants table */
-        push_upval(L, &constants_key);
+        pushRegistry(L, &constants_key);
         lua_pushlstring(L, tok->str, tok->size);
         lua_rawget(L, -2);
         lua_remove(L, -2); /* constants table */

@@ -120,6 +120,8 @@ static void (lua_remove)(lua_State *L, int idx) {
 # define OS_OSX
 #elif defined __linux__
 # define OS_LINUX
+#elif defined __EMSCRIPTEN__ || defined __WASM__
+# define OS_BROWSER
 #elif defined __FreeBSD__ || defined __OpenBSD__ || defined __NetBSD__
 # define OS_BSD
 #elif defined unix || defined __unix__ || defined __unix || defined _POSIX_VERSION || defined _XOPEN_VERSION
@@ -249,9 +251,9 @@ extern int next_unnamed_key;
 extern int niluv_key;
 extern int asmname_key;
 
-int equals_upval(lua_State* L, int idx, int* key);
-void push_upval(lua_State* L, int* key);
-void set_upval(lua_State* L, int* key);
+int equalsRegistry(lua_State* L, int idx, void * key);
+void pushRegistry(lua_State* L, void * key);
+void setRegistry(lua_State* L, void * key);
 struct jit* get_jit(lua_State* L);
 
 /* both ctype and cdata are stored as userdatas

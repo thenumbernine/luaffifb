@@ -91,12 +91,12 @@ struct ctype* push_ctype(lua_State* L, int ct_usr, const struct ctype* ct)
     ret = (struct ctype*) lua_newuserdata(L, sizeof(struct ctype));
     *ret = *ct;
 
-    push_upval(L, &ctype_mt_key);
+    pushRegistry(L, &ctype_mt_key);
     lua_setmetatable(L, -2);
 
 #if LUA_VERSION_NUM == 501
     if (!ct_usr || lua_isnil(L, ct_usr)) {
-        push_upval(L, &niluv_key);
+        pushRegistry(L, &niluv_key);
         lua_setfenv(L, -2);
     }
 #endif
@@ -162,7 +162,7 @@ void* push_cdata(lua_State* L, int ct_usr, const struct ctype* ct)
 
 #if LUA_VERSION_NUM == 501
     if (!ct_usr || lua_isnil(L, ct_usr)) {
-        push_upval(L, &niluv_key);
+        pushRegistry(L, &niluv_key);
         lua_setfenv(L, -2);
     }
 #endif
@@ -172,7 +172,7 @@ void* push_cdata(lua_State* L, int ct_usr, const struct ctype* ct)
         lua_setuservalue(L, -2);
     }
 
-    push_upval(L, &cdata_mt_key);
+    pushRegistry(L, &cdata_mt_key);
     lua_setmetatable(L, -2);
 
     if (!ct->is_defined && ct_usr && !lua_isnil(L, ct_usr)) {
@@ -188,7 +188,7 @@ void push_callback(lua_State* L, cfunction luafunc, cfunction cfunc)
     pf[0] = luafunc;
     pf[1] = cfunc;
 
-    push_upval(L, &callback_mt_key);
+    pushRegistry(L, &callback_mt_key);
     lua_setmetatable(L, -2);
 }
 
@@ -205,8 +205,9 @@ void check_ctype(lua_State* L, int idx, struct ctype* ct)
         lua_remove(L, -2); /* remove the user value from parse_type */
 
     } else if (lua_getmetatable(L, idx)) {
-        if (!equals_upval(L, -1, &ctype_mt_key)
-                && !equals_upval(L, -1, &cdata_mt_key)) {
+        if (!equalsRegistry(L, -1, &ctype_mt_key)
+            && !equalsRegistry(L, -1, &cdata_mt_key)
+		) {
             goto err;
         }
 
@@ -237,7 +238,7 @@ void* to_cdata(lua_State* L, int idx, struct ctype* ct)
         return NULL;
     }
 
-    if (!equals_upval(L, -1, &cdata_mt_key)) {
+    if (!equalsRegistry(L, -1, &cdata_mt_key)) {
         lua_pop(L, 1); /* mt */
         lua_pushnil(L);
         return NULL;

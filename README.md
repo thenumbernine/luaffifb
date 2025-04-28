@@ -4,6 +4,7 @@ Me picking up the facebook-archive luaffifb project.  Of all the lua-ffi project
 
 - ctype objects as well as cdata objects can now use their metatables' `__index` - just like in vanilla LuaJIT.
 - arithmetic on pointers no longer calls into the metatmethod of the underlying ctype - just like in vanilla LuaJIT.
+- luaffifb's `tonumber` now handles float, double, complex float, complex double, as well as integer types; and it no longer converts pointers and arrays - just like in vanilla LuaJIT.
 - `ffi.null` as well as `ffi.NULL`
 
 # Changes still to make:
