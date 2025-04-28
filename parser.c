@@ -1192,7 +1192,7 @@ static int parse_attribute(lua_State* L, Parser* P, Token* tok, CType* ct, Parse
 
 /*
 Parses out the base type of a type expression in a function declaration, struct definition, typedef etc.
-Leaves the uservalue 0 of the ctype userdata on the stack.
+Leaves the uservalue 1 of the ctype userdata on the stack.
 */
 void parse_type(
 	lua_State * L,
@@ -1264,8 +1264,8 @@ void parse_type(
 		instantiate_typedef(P, ct, (const CType*) lua_touserdata(L, -1));
 
 		// we only want the uservalue from the ctype
-		lua_getuservalue(L, -1);			// stack: ..., ctype, ctype uservalue 0
-		lua_replace(L, -2);					// stack: ..., ctype uservalue 0
+		lua_getuservalue(L, -1);			// stack: ..., ctype, ctype uservalue 1
+		lua_replace(L, -2);					// stack: ..., ctype uservalue 1
 	}
 
 	while (next_token(L, P, &tok)) {

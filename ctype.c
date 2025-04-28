@@ -119,7 +119,7 @@ CType* push_ctype(
 
 	if (ct_usr && !lua_isnil(L, ct_usr)) {
 		lua_pushvalue(L, ct_usr);		// stack: ..., u, stack[ct_usr]
-		lua_setuservalue(L, -2);		// stack: ..., u;  u's uservalue 0 is set to stack[ct_usr]
+		lua_setuservalue(L, -2);		// stack: ..., u;  u's uservalue 1 is set to stack[ct_usr]
 	}
 
 	// if stack[ct_usr] is not nil then set stack[ct_usr][&to_define_key][u] = true
@@ -151,7 +151,7 @@ size_t ctype_size(lua_State* L, const CType* ct) {
 }
 
 /*
-Creates a new `CData` userdata,
+Creates a new `CData` userdata & leaves it on the stack,
 Sets its metatable to registry[cdata_mt_key]
 If `ct_usr` is nonzero then assigns it's 0th uservalue to `stack[ct_usr]`
 ... what is the uservalue of cdata userdata supposed to be?
@@ -196,7 +196,7 @@ void * push_cdata(
 
 	if (ct_usr && !lua_isnil(L, ct_usr)) {
 		lua_pushvalue(L, ct_usr);		// stack: ..., u, stack[ct_usr]
-		lua_setuservalue(L, -2);		// stack: ..., u;  u's uservalue 0 is set to stack[ct_usr]
+		lua_setuservalue(L, -2);		// stack: ..., u;  u's uservalue 1 is set to stack[ct_usr]
 	}
 
 	pushRegistry(L, &cdata_mt_key);		// stack: ..., u, registry[&cdata_mt_key]
@@ -226,7 +226,7 @@ Looks at the stack index `idx`,
 If it's a string then parses it.
 If it's a ctype or cdata metatable then uses the associated ctype.
 Writes the ctype to `ct`.
-Pushes the ctype's uservalue 0 onto the stack ...
+Pushes the ctype's uservalue 1 onto the stack ...
 ... for ctype, this is some weird arg, either {} for complex or nil
 ... for cdata, what is this?
 And how come it's casting cdata_mt_key's as CType?
@@ -238,7 +238,7 @@ void check_ctype(
 ) {											// stack: ...
 	if (lua_isstring(L, idx)) {
 		Parser P = newParser(lua_tostring(L, idx));
-		parse_type(L, &P, ct);						// stack: ..., ct's userdata's uservalue 0
+		parse_type(L, &P, ct);						// stack: ..., ct's userdata's uservalue 1
 		parse_argument(L, &P, -1, ct, NULL, NULL);	// stack: ..., ctype uservalue, ... arg uservalue or new ctype uservalue which is it?
 		lua_remove(L, -2); 							// stack: ..., parse_argument returned uservalue
 		return;
@@ -253,7 +253,7 @@ void check_ctype(
 		lua_pop(L, 1); 									// stack: ... 
 		// wait ... if it's a cdata ... then treat its userdata as a struct type ... why?
 		*ct = *(CType*)lua_touserdata(L, idx);	// stack: ...
-		lua_getuservalue(L, idx);						// stack: ..., stack[idx]'s usrvalue 0
+		lua_getuservalue(L, idx);						// stack: ..., stack[idx]'s uservalue 1
 		return;
 	}
 
@@ -284,7 +284,7 @@ void * to_cdata(lua_State* L, int idx, CType* ct) {
 	lua_pop(L, 1);									// stack: ...
 	CData * cd = (CData *)lua_touserdata(L, idx);
 	*ct = cd->type;
-	lua_getuservalue(L, idx);						// stack: ..., stack[idx]'s uservalue 0
+	lua_getuservalue(L, idx);						// stack: ..., stack[idx]'s uservalue 1
 
 	if ((ct->is_reference)
 		|| (ct->pointers && !ct->is_array)
@@ -296,15 +296,15 @@ void * to_cdata(lua_State* L, int idx, CType* ct) {
 }
 
 /*
-check_cdata returns the CData* and pushes the user value onto the stack.
-Also dereferences references. 
+pushes the CData's userdata's uservalue1 onto the stack
+returns the CData*
 */
 void * check_cdata(
 	lua_State * L,
 	int idx,
 	CType * ct
 ) {											// stack: ...
-	void * p = to_cdata(L, idx, ct);		// stack: ..., stack[idx]'s uservalue 0 if it is a cdata, nil otherwise
+	void * p = to_cdata(L, idx, ct);		// stack: ..., stack[idx]'s uservalue 1 if it is a CData, nil otherwise
 	if (ct->type == INVALID_TYPE) {
 		luaL_error(L, "expected cdata for arg #%d", idx);
 	}

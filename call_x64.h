@@ -797,29 +797,34 @@ CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 	return *pf;
 }
 
-void compile_function(lua_State* L, CFunction func, int ct_usr, const CType* ct)
-{
-	size_t i, nargs;
-	int num_upvals;
-	const CType* mbr_ct;
-	JIT* Dst = get_jit(L);
-	struct reg_alloc reg;
-	void* p;
+/*
+Builds the JIT code for calling the function based on its ct.
+Pushes the userdata of the function onto the stack.
+ct_usr = location of uservalue1 of the function CData userdata
+*/
+void compile_function(
+	lua_State* L,
+	CFunction func,
+	int ct_usr,
+	const CType* ct
+) {									// stack: ...
 	int top = lua_gettop(L);
+	
+	JIT* Dst = get_jit(L);
 	int* perr = &Dst->last_errno;
 
 	ct_usr = lua_absindex(L, ct_usr);
 
+	struct reg_alloc reg;
 	memset(&reg, 0, sizeof(reg));
 	reg.off = 32 + REGISTER_STACK_SPACE(ct);
 
 	dasm_setup(Dst, build_actionlist);
 
-	p = push_cdata(L, ct_usr, ct);
-	*(CFunction*) p = func;
-	num_upvals = 1;
+	void * p = push_cdata(L, ct_usr, ct);		// stack: ..., new function userdata associated with ctype ct
+	*(CFunction *)p = func;
 
-	nargs = lua_rawlen(L, ct_usr);
+	size_t nargs = lua_rawlen(L, ct_usr);
 
 	if (ct->calling_convention != C_CALL && ct->has_var_arg) {
 		luaL_error(L, "vararg is only allowed with the c calling convention");
@@ -839,23 +844,26 @@ void compile_function(lua_State* L, CFunction func, int ct_usr, const CType* ct)
 	dasm_put(Dst, 1072, 32 + REGISTER_STACK_SPACE(ct));
 
 #if !defined _WIN64 && !defined __amd64__
-	/* Returned complex doubles require a hidden first parameter where the
-	 * data is stored, which is popped by the calling code. */
-	lua_rawgeti(L, ct_usr, 0);
-	mbr_ct = (const CType*) lua_touserdata(L, -1);
-	if (!mbr_ct->pointers && !mbr_ct->is_reference && mbr_ct->type == COMPLEX_DOUBLE_TYPE) {
-		/* we can allocate more space for arguments as long as no add_*
-		 * function has been called yet, mbr_ct will be added as an upvalue in
-		 * the return processing later */
-		dasm_put(Dst, 1085, (unsigned int)((uintptr_t)(mbr_ct)), (unsigned int)(((uintptr_t)(mbr_ct))>>32));
-		add_pointer(Dst, ct, &reg);
+	{
+		/* Returned complex doubles require a hidden first parameter where the
+		 * data is stored, which is popped by the calling code. */
+		lua_rawgeti(L, ct_usr, 0);
+		const CType * mbr_ct = (const CType*) lua_touserdata(L, -1);
+		if (!mbr_ct->pointers && !mbr_ct->is_reference && mbr_ct->type == COMPLEX_DOUBLE_TYPE) {
+			/* we can allocate more space for arguments as long as no add_*
+			 * function has been called yet, mbr_ct will be added as an upvalue in
+			 * the return processing later */
+			dasm_put(Dst, 1085, (unsigned int)((uintptr_t)(mbr_ct)), (unsigned int)(((uintptr_t)(mbr_ct))>>32));
+			add_pointer(Dst, ct, &reg);
+		}
+		lua_pop(L, 1);
 	}
-	lua_pop(L, 1);
 #endif
 
-	for (i = 1; i <= nargs; i++) {
+	int num_upvals = 1;
+	for (int i = 1; i <= nargs; i++) {
 		lua_rawgeti(L, ct_usr, (int) i);
-		mbr_ct = (const CType*) lua_touserdata(L, -1);
+		const CType * mbr_ct = (const CType*) lua_touserdata(L, -1);
 
 		if (mbr_ct->pointers || mbr_ct->is_reference) {
 			lua_getuservalue(L, -1);
@@ -1113,7 +1121,7 @@ void compile_function(lua_State* L, CFunction func, int ct_usr, const CType* ct)
 	 */
 
 	lua_rawgeti(L, ct_usr, 0);
-	mbr_ct = (const CType*) lua_touserdata(L, -1);
+	const CType* mbr_ct = (const CType*) lua_touserdata(L, -1);
 
 	if (mbr_ct->pointers || mbr_ct->is_reference || mbr_ct->type == INTPTR_TYPE) {
 		lua_getuservalue(L, -1);
@@ -1210,6 +1218,14 @@ void compile_function(lua_State* L, CFunction func, int ct_usr, const CType* ct)
 	}
 
 	assert(lua_gettop(L) == top + num_upvals);
+
+	// next:
+	// ... compile() is called, 
+	// ... a CFunction `f` is returned, 
+	// ... that and the original CFunction `func` are both set in a userdata CFunction[2] 
+	// ... and that userdata is put in the upvalue of the C closure ... of f ... onto the stack ...
+	// wait, why does f have f in its own upvalue?
+	
 	{
 		CFunction f = compile(Dst, L, func, LUA_NOREF);
 		/* add a callback as an upval so that the jitted code gets cleaned up when

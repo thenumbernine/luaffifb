@@ -9,6 +9,7 @@
 
 #include "ffi.h"
 #include "call.h"
+#include "ctype.h"	// push_cdata only used by CALL_WITH_LIBFFI
 
 // has DASM_CHECKS in it which sometimes is used by the dynasm/dasc_*.h files included below
 // also has prototypes for dasm_init/dasm_free which the CALL_WITH_LIBFFI provides stub functions for
@@ -154,7 +155,15 @@ CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct) 
 	return (CFunction)NULL;
 }
 
-void compile_function(lua_State* L, CFunction func, int ct_usr, const CType* ct) {
+/*
+ct_usr = index of the function's ctype's uservalue 1
+*/
+void compile_function(
+	lua_State * L,
+	CFunction func,
+	int ct_usr,					// CType uservalue ... what are these used for again?  "usr" for the uservalue doesn't lend much of an explanation ...
+	const CType * ct
+) {								// stack: ...
 	int top = lua_gettop(L);
 	ct_usr = lua_absindex(L, ct_usr);
 
@@ -162,30 +171,33 @@ void compile_function(lua_State* L, CFunction func, int ct_usr, const CType* ct)
 		luaL_error(L, "vararg is only allowed with the c calling convention");
 	}
 
-// what's this for?
-//	void * p = push_cdata(L, ct_usr, ct);
-//	*(CFunction*) p = func;
+	void * p = push_cdata(L, ct_usr, ct);	// stack: ..., p = CData userdata for type ct
+	*(CFunction *)p = func;
 
 	// fill out types
 	size_t nargs = lua_rawlen(L, ct_usr);
-	const int maxArgs = 256;
+	int const maxArgs = 256;
 	ffi_type * argFFITypes[maxArgs] = {NULL};
 	if (nargs > maxArgs) {
 		luaL_error(L, "function call has too many args: %d > %d\n", nargs, maxArgs);
 	}
 
+	/* 
+	Does this mean a function's CType userdata's uservalue 1 is a table of:
+	[0] = userdata<CType *> of the return type
+	[i] = userdata<CType *> of the i'th arg type, for i>0
+	*/
 	for (int i = 1; i <= nargs; i++) {
 		lua_rawgeti(L, ct_usr, i);
-		const CType * mbr_ct = (const CType*) lua_touserdata(L, -1);
+		CType const * mbr_ct = (CType const *)lua_touserdata(L, -1);
 		argFFITypes[i-1] = getFFITypeForCType(L, mbr_ct);
 		lua_pop(L, 1);
 	}
 
 	lua_rawgeti(L, ct_usr, 0);
-	const CType * mbr_ct = (const CType*) lua_touserdata(L, -1);
-	lua_pop(L, 1);
-
+	CType const * mbr_ct = (CType const *)lua_touserdata(L, -1);
 	ffi_type * retFFIType = getFFITypeForCType(L, mbr_ct);
+	lua_pop(L, 1);
 
 	// push the ffi_cif
 	lua_pushvalue(L, ct_usr);
@@ -203,27 +215,29 @@ void compile_function(lua_State* L, CFunction func, int ct_usr, const CType* ct)
 		luaL_error(L, "ffi_prep_cif failed with %d", prepResult);
 	}
 
-	// save it as a closure arg
-	// push the call_ffi function
-	lua_pushcclosure(L, call_ffi, 2);
+	// so when __call on the CData of a CFunction happens it had better match spec
+	// so what is that spec?
+
+	lua_pushcclosure(L, (lua_CFunction)func, 0);
 }
+
+// stub functions
 
 DASM_FDEF void dasm_init(Dst_DECL, int maxsection) {}
 DASM_FDEF void dasm_free(Dst_DECL) {}
 DASM_FDEF void dasm_setupglobal(Dst_DECL, void **gl, unsigned int maxgl) {}
 DASM_FDEF int dasm_link(Dst_DECL, size_t *szp) { return 0; }	// 0 aka DASM_S_OK
 
+void free_code(JIT* jit, lua_State* L, CFunction func) {}
 
-/* push_func_ref pushes a copy of the upval table embedded in the compiled
- * function func.
- */
+// will I need this one? it looks important...
 void push_func_ref(lua_State* L, CFunction func) {
 	luaL_error(L, "TODO push_func_ref");
 }
 
-void free_code(JIT* jit, lua_State* L, CFunction func) {}
 
 #else	// defined(CALL_WITH_LIBFFI)
+
 
 // has to be here to define DASM_M_GROW & DASM_M_FREE
 // has to have call.h before it in order to define Dst_DECL & Dst_REF
