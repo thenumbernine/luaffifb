@@ -67,51 +67,45 @@ struct jit;
 
 EXTERN_C EXPORT int luaopen_ffi(lua_State* L);
 
-static int lua_absindex2(lua_State* L, int idx) {
-    return (LUA_REGISTRYINDEX <= idx && idx < 0)
-         ? lua_gettop(L) + idx + 1
-         : idx;
-}
-/* use our own version of lua_absindex such that lua_absindex(L, 0) == 0 */
+int lua_absindex2(lua_State* L, int idx);
+// use our own version of lua_absindex such that lua_absindex(L, 0) == 0
 #define lua_absindex(L, idx) lua_absindex2(L, idx)
 
 #if LUA_VERSION_NUM == 501
-static void lua_callk(lua_State *L, int nargs, int nresults, int ctx, lua_CFunction k)
-{
-    lua_call(L, nargs, nresults);
+inline void lua_callk(lua_State *L, int nargs, int nresults, int ctx, lua_CFunction k) {
+	lua_call(L, nargs, nresults);
 }
 /*
 ** set functions from list 'l' into table at top - 'nup'; each
 ** function gets the 'nup' elements at the top as upvalues.
 ** Returns with only the table at the stack.
 */
-static void luaL_setfuncs (lua_State *L, const luaL_Reg *l, int nup) {
+inline void luaL_setfuncs (lua_State *L, const luaL_Reg *l, int nup) {
   luaL_checkstack(L, nup, "too many upvalues");
   for (; l && l->name; l++) {  /* fill the table with given functions */
-    int i;
-    for (i = 0; i < nup; i++)  /* copy upvalues to the top */
-      lua_pushvalue(L, -nup);
-    lua_pushcclosure(L, l->func, nup);  /* closure with those upvalues */
-    lua_setfield(L, -(nup + 2), l->name);
+	int i;
+	for (i = 0; i < nup; i++)  /* copy upvalues to the top */
+	  lua_pushvalue(L, -nup);
+	lua_pushcclosure(L, l->func, nup);  /* closure with those upvalues */
+	lua_setfield(L, -(nup + 2), l->name);
   }
   lua_pop(L, nup);  /* remove upvalues */
 }
 #define lua_setuservalue lua_setfenv
 #define lua_getuservalue lua_getfenv
 #define lua_rawlen lua_objlen
-static char* luaL_prepbuffsize(luaL_Buffer* B, size_t sz) {
-    if (sz > LUAL_BUFFERSIZE) {
-        luaL_error(B->L, "string too long");
-    }
-    return luaL_prepbuffer(B);
-}
-#elif LUA_VERSION_NUM >= 503
-static void (lua_remove)(lua_State *L, int idx) {
-    lua_remove(L, idx);
+inline char* luaL_prepbuffsize(luaL_Buffer* B, size_t sz) {
+	if (sz > LUAL_BUFFERSIZE) {
+		luaL_error(B->L, "string too long");
+	}
+	return luaL_prepbuffer(B);
 }
 #endif
+#if LUA_VERSION_NUM >= 503
+void (lua_remove)(lua_State *L, int idx);
+#endif
 
-/* architectures */
+// architectures
 #if defined _WIN32 && defined UNDER_CE
 # define OS_CE
 #elif defined _WIN32
@@ -128,7 +122,7 @@ static void (lua_remove)(lua_State *L, int idx) {
 # define OS_POSIX
 #endif
 
-/* architecture */
+// architecture
 #if defined __i386__ || defined _M_IX86
 # define ARCH_X86
 #elif defined __amd64__ || defined _M_X64
@@ -147,19 +141,19 @@ static void (lua_remove)(lua_State *L, int idx) {
 #ifdef _WIN32
 
 #   ifdef UNDER_CE
-        static void* DoLoadLibraryA(const char* name) {
-          wchar_t buf[MAX_PATH];
-          int sz = MultiByteToWideChar(CP_UTF8, 0, name, -1, buf, 512);
-          if (sz > 0) {
-            buf[sz] = 0;
-            return LoadLibraryW(buf);
-          } else {
-            return NULL;
-          }
-        }
-#       define LoadLibraryA DoLoadLibraryA
+		inline void* DoLoadLibraryA(const char* name) {
+		  wchar_t buf[MAX_PATH];
+		  int sz = MultiByteToWideChar(CP_UTF8, 0, name, -1, buf, 512);
+		  if (sz > 0) {
+			buf[sz] = 0;
+			return LoadLibraryW(buf);
+		  } else {
+			return NULL;
+		  }
+		}
+#	   define LoadLibraryA DoLoadLibraryA
 #   else
-#       define GetProcAddressA GetProcAddress
+#	   define GetProcAddressA GetProcAddress
 #   endif
 
 #   define LIB_FORMAT_1 "%s.dll"
@@ -191,29 +185,29 @@ static void (lua_remove)(lua_State *L, int idx) {
 struct token;
 
 struct parser {
-    int line;
-    const char* next;
-    const char* prev;
-    unsigned align_mask;
+	int line;
+	const char* next;
+	const char* prev;
+	unsigned align_mask;
 };
 
 struct page {
-    size_t size;
-    size_t off;
-    size_t freed;
+	size_t size;
+	size_t off;
+	size_t freed;
 };
 
 struct jit {
-    lua_State* L;
-    int32_t last_errno;
-    dasm_State* ctx;
-    size_t pagenum;
-    struct page** pages;
-    size_t align_page_size;
-    void** globals;
-    int function_extern;
-    void* lua_dll;
-    void* kernel32_dll;
+	lua_State* L;
+	int32_t last_errno;
+	dasm_State* ctx;
+	size_t pagenum;
+	struct page** pages;
+	size_t align_page_size;
+	void** globals;
+	int function_extern;
+	void* lua_dll;
+	void* kernel32_dll;
 };
 
 #define ALIGN_DOWN(PTR, MASK) \
@@ -221,14 +215,14 @@ struct jit {
 #define ALIGN_UP(PTR, MASK) \
   (( ((uintptr_t) (PTR)) + ((uintptr_t) (MASK)) ) & (~ ((uintptr_t) (MASK)) ))
 
-/* struct cdata/CType */
+// CData/CType
 
 #define PTR_ALIGN_MASK (sizeof(void*) - 1)
 #define FUNCTION_ALIGN_MASK (sizeof(void (*)()) - 1)
 #define DEFAULT_ALIGN_MASK 7
 
 #ifdef OS_OSX
-/* TODO: figure out why the alignof trick doesn't work on OS X */
+// TODO: figure out why the alignof trick doesn't work on OS X
 #define ALIGNED_DEFAULT 7
 #elif defined __GNUC__
 #define ALIGNED_DEFAULT (__alignof__(void* __attribute__((aligned))) - 1)
@@ -267,31 +261,31 @@ struct jit* get_jit(lua_State* L);
  */
 
 enum {
-    C_CALL,
-    STD_CALL,
-    FAST_CALL,
+	C_CALL,
+	STD_CALL,
+	FAST_CALL,
 };
 
 enum {
-    INVALID_TYPE,
-    VOID_TYPE,
-    FLOAT_TYPE,
-    DOUBLE_TYPE,
-    LONG_DOUBLE_TYPE,
-    COMPLEX_FLOAT_TYPE,
-    COMPLEX_DOUBLE_TYPE,
-    COMPLEX_LONG_DOUBLE_TYPE,
-    BOOL_TYPE,
-    INT8_TYPE,
-    INT16_TYPE,
-    INT32_TYPE,
-    INT64_TYPE,
-    INTPTR_TYPE,
-    ENUM_TYPE,
-    UNION_TYPE,
-    STRUCT_TYPE,
-    FUNCTION_TYPE,
-    FUNCTION_PTR_TYPE,	// why separate FUNCTION_PTR_TYPE instead of just FUNCTION_TYPE with pointers set?
+	INVALID_TYPE,
+	VOID_TYPE,
+	FLOAT_TYPE,
+	DOUBLE_TYPE,
+	LONG_DOUBLE_TYPE,
+	COMPLEX_FLOAT_TYPE,
+	COMPLEX_DOUBLE_TYPE,
+	COMPLEX_LONG_DOUBLE_TYPE,
+	BOOL_TYPE,
+	INT8_TYPE,
+	INT16_TYPE,
+	INT32_TYPE,
+	INT64_TYPE,
+	INTPTR_TYPE,
+	ENUM_TYPE,
+	UNION_TYPE,
+	STRUCT_TYPE,
+	FUNCTION_TYPE,
+	FUNCTION_PTR_TYPE,	// why separate FUNCTION_PTR_TYPE instead of just FUNCTION_TYPE with pointers set?
 };
 
 #define IS_CHAR_UNSIGNED (((char) -1) > 0)
@@ -313,44 +307,44 @@ enum {
  * ton of them on the stack, we try and minimise its size.
  */
 typedef struct CType {
-    size_t base_size; /* size of the base type in bytes */
+	size_t base_size; /* size of the base type in bytes */
 
-    union {
-        /* valid if is_bitfield */
-        struct {
-            /* size of bitfield in bits */
-            unsigned bit_size : 7;
-            /* offset within the current byte between 0-63 */
-            unsigned bit_offset : 6;
-        };
-        /* Valid if is_array */
-        size_t array_size;
-        /* Valid for is_variable_struct or is_variable_array. If
-         * variable_size_known (only used for is_variable_struct) then this is
-         * the total increment otherwise this is the per element increment.
-         */
-        size_t variable_increment;
-    };
-    size_t offset;
-    unsigned align_mask : 4; /* as (align bytes - 1) eg 7 gives 8 byte alignment */
-    unsigned pointers : POINTER_BITS; /* number of dereferences to get to the base type including +1 for arrays */
-    unsigned const_mask : POINTER_MAX + 1; /* const pointer mask, LSB is current pointer, +1 for the whether the base type is const */
-    unsigned type : 5; /* value given by type enum above */
-    unsigned is_reference : 1;
-    unsigned is_array : 1;
-    unsigned is_defined : 1;
-    unsigned is_null : 1;
-    unsigned has_member_name : 1;
-    unsigned calling_convention : 2;
-    unsigned has_var_arg : 1;
-    unsigned is_variable_array : 1; /* set for variable array types where we don't know the variable size yet */
-    unsigned is_variable_struct : 1;
-    unsigned variable_size_known : 1; /* used for variable structs after we know the variable size */
-    unsigned is_bitfield : 1;
-    unsigned has_bitfield : 1;
-    unsigned is_jitted : 1;
-    unsigned is_packed : 1;
-    unsigned is_unsigned : 1;
+	union {
+		/* valid if is_bitfield */
+		struct {
+			/* size of bitfield in bits */
+			unsigned bit_size : 7;
+			/* offset within the current byte between 0-63 */
+			unsigned bit_offset : 6;
+		};
+		/* Valid if is_array */
+		size_t array_size;
+		/* Valid for is_variable_struct or is_variable_array. If
+		 * variable_size_known (only used for is_variable_struct) then this is
+		 * the total increment otherwise this is the per element increment.
+		 */
+		size_t variable_increment;
+	};
+	size_t offset;
+	unsigned align_mask : 4; /* as (align bytes - 1) eg 7 gives 8 byte alignment */
+	unsigned pointers : POINTER_BITS; /* number of dereferences to get to the base type including +1 for arrays */
+	unsigned const_mask : POINTER_MAX + 1; /* const pointer mask, LSB is current pointer, +1 for the whether the base type is const */
+	unsigned type : 5; /* value given by type enum above */
+	unsigned is_reference : 1;
+	unsigned is_array : 1;
+	unsigned is_defined : 1;
+	unsigned is_null : 1;
+	unsigned has_member_name : 1;
+	unsigned calling_convention : 2;
+	unsigned has_var_arg : 1;
+	unsigned is_variable_array : 1; /* set for variable array types where we don't know the variable size yet */
+	unsigned is_variable_struct : 1;
+	unsigned variable_size_known : 1; /* used for variable structs after we know the variable size */
+	unsigned is_bitfield : 1;
+	unsigned has_bitfield : 1;
+	unsigned is_jitted : 1;
+	unsigned is_packed : 1;
+	unsigned is_unsigned : 1;
 } CType;
 /*
 sizeof(ctype) = 32 ... sizeof'size_t' = 8 = 64 bits
@@ -368,55 +362,36 @@ But really ... WHYYYY are we using bitfields to STORE A RECURSIVE STRUCTURE.
 #ifdef _MSC_VER
 __declspec(align(16))
 #endif
-struct cdata {
-    CType type
+typedef struct CData {
+	CType type
 #ifdef __GNUC__
-      __attribute__ ((aligned(16)))
+	  __attribute__ ((aligned(16)))
 #endif
-      ;
-};
+	  ;
+} CData;
 
-typedef void (*cfunction)(void);
+typedef void (*CFunction)();
 
 #ifdef HAVE_COMPLEX
 typedef double complex complex_double;
 typedef float complex complex_float;
-static complex_double mk_complex_double(double real, double imag) {
-    return real + imag * 1i;
-}
-static complex_double mk_complex_float(double real, double imag) {
-    return real + imag * 1i;
-}
+complex_double mk_complex_double(double real, double imag);
+complex_double mk_complex_float(double real, double imag);
 #else
 typedef struct {
-    double real, imag;
+	double real, imag;
 } complex_double;
 
 typedef struct {
-    float real, imag;
+	float real, imag;
 } complex_float;
 
-static complex_double mk_complex_double(double real, double imag) {
-    complex_double ret = { real, imag };
-    return ret;
-}
-static complex_float mk_complex_float(double real, double imag) {
-    complex_float ret = { real, imag };
-    return ret;
-}
-static double creal(complex_double c) {
-    return c.real;
-}
-static float crealf(complex_float c) {
-    return c.real;
-}
-
-static double cimag(complex_double c) {
-    return c.imag;
-}
-static float cimagf(complex_float c) {
-    return c.imag;
-}
+complex_double mk_complex_double(double real, double imag);
+complex_float mk_complex_float(double real, double imag);
+inline double creal(complex_double c) { return c.real; }
+inline float crealf(complex_float c) { return c.real; }
+inline double cimag(complex_double c) { return c.imag; }
+inline float cimagf(complex_float c) { return c.imag; }
 #endif
 
 #define CALLBACK_FUNC_USR_IDX 1
@@ -424,7 +399,7 @@ static float cimagf(complex_float c) {
 void set_defined(lua_State* L, int ct_usr, CType* ct);
 CType* push_ctype(lua_State* L, int ct_usr, const CType* ct);
 void* push_cdata(lua_State* L, int ct_usr, const CType* ct); /* called from asm */
-void push_callback(lua_State* L, cfunction luafunc, cfunction cfunc);
+void push_callback(lua_State* L, CFunction luafunc, CFunction cfunc);
 void check_ctype(lua_State* L, int idx, CType* ct);
 void* to_cdata(lua_State* L, int idx, CType* ct);
 void* check_cdata(lua_State* L, int idx, CType* ct);
@@ -438,15 +413,15 @@ int push_user_mt(lua_State* L, int ct_usr, const CType* ct);
 
 int ffi_cdef(lua_State* L);
 
-void push_func_ref(lua_State* L, cfunction func);
-void free_code(struct jit* jit, lua_State* L, cfunction func);
+void push_func_ref(lua_State* L, CFunction func);
+void free_code(struct jit* jit, lua_State* L, CFunction func);
 int x86_return_size(lua_State* L, int usr, const CType* ct);
-void compile_function(lua_State* L, cfunction f, int ct_usr, const CType* ct);
-cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct);
+void compile_function(lua_State* L, CFunction f, int ct_usr, const CType* ct);
+CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct);
 void compile_globals(struct jit* jit, lua_State* L);
 int get_extern(struct jit* jit, uint8_t* addr, int idx, int type);
 
-/* WARNING: assembly needs to be updated for prototype changes of these functions */
+// WARNING: assembly needs to be updated for prototype changes of these functions
 int check_bool(lua_State* L, int idx);
 double check_double(lua_State* L, int idx);
 double check_complex_imag(lua_State* L, int idx);
@@ -457,9 +432,9 @@ int32_t check_int32(lua_State* L, int idx);
 uint32_t check_uint32(lua_State* L, int idx);
 uintptr_t check_uintptr(lua_State* L, int idx);
 int32_t check_enum(lua_State* L, int idx, int to_usr, const CType* tt);
-/* these two will always push a value so that we can create structs/functions on the fly */
+// these two will always push a value so that we can create structs/functions on the fly
 void* check_typed_pointer(lua_State* L, int idx, int to_usr, const CType* tt);
-cfunction check_typed_cfunction(lua_State* L, int idx, int to_usr, const CType* tt);
+CFunction check_typed_cfunction(lua_State* L, int idx, int to_usr, const CType* tt);
 complex_double check_complex_double(lua_State* L, int idx);
 complex_float check_complex_float(lua_State* L, int idx);
 
@@ -469,6 +444,3 @@ void unpack_varargs_reg(lua_State* L, int first, int last, char* to);
 void unpack_varargs_stack_skip(lua_State* L, int first, int last, int ints_to_skip, int floats_to_skip, char* to);
 void unpack_varargs_float(lua_State* L, int first, int last, int max, char* to);
 void unpack_varargs_int(lua_State* L, int first, int last, int max, char* to);
-
-
-

@@ -8,7 +8,7 @@
  */
 #include "ffi.h"
 
-static cfunction compile(Dst_DECL, lua_State* L, cfunction func, int ref);
+static CFunction compile(Dst_DECL, lua_State* L, CFunction func, int ref);
 
 static void* reserve_code(struct jit* jit, lua_State* L, size_t sz);
 static void commit_code(struct jit* jit, void* p, size_t sz);
@@ -50,7 +50,7 @@ union Value {
 
 struct CallInfo {
 	ffi_cif cif;
-	cfunction func;
+	CFunction func;
 	int nargs;
 	void ** valuePtrs;	//allocated upon creation, size nargs, points into valueData
 	Value * valueData;
@@ -153,12 +153,12 @@ static void call_ffi(lua_State *L) {
 	// TODO translate the Lua result to C result
 }
 
-cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct) {
+CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct) {
 	luaL_error(L, "TODO compile_callback");
 	return {};
 }
 
-void compile_function(lua_State* L, cfunction func, int ct_usr, const CType* ct) {
+void compile_function(lua_State* L, CFunction func, int ct_usr, const CType* ct) {
     int top = lua_gettop(L);
     ct_usr = lua_absindex(L, ct_usr);
 
@@ -168,7 +168,7 @@ void compile_function(lua_State* L, cfunction func, int ct_usr, const CType* ct)
 
 // what's this for?
 //    void * p = push_cdata(L, ct_usr, ct);
-//    *(cfunction*) p = func;
+//    *(CFunction*) p = func;
 
 	// fill out types
     size_t nargs = lua_rawlen(L, ct_usr);
@@ -234,7 +234,7 @@ struct jit_head {
 
 #define LINKTABLE_MAX_SIZE (sizeof(extnames) / sizeof(extnames[0]) * (JUMP_SIZE))
 
-static cfunction compile(struct jit* jit, lua_State* L, cfunction func, int ref)
+static CFunction compile(struct jit* jit, lua_State* L, CFunction func, int ref)
 {
     struct jit_head* code;
     size_t codesz;
@@ -261,7 +261,7 @@ static cfunction compile(struct jit* jit, lua_State* L, cfunction func, int ref)
     }
 
     commit_code(jit, code, codesz);
-    return (cfunction) (code+1);
+    return (CFunction) (code+1);
 }
 
 typedef uint8_t jump_t[JUMP_SIZE];
@@ -304,7 +304,7 @@ static void* reserve_code(struct jit* jit, lua_State* L, size_t sz)
     if (off + sz >= size) {
         int i;
         uint8_t* pdata;
-        cfunction func;
+        CFunction func;
 
         /* need to create a new page */
         jit->pages = (struct page**) realloc(jit->pages, (++jit->pagenum) * sizeof(jit->pages[0]));
@@ -321,8 +321,8 @@ static void* reserve_code(struct jit* jit, lua_State* L, size_t sz)
 
 #define ADDFUNC(DLL, NAME) \
         lua_pushliteral(L, #NAME); \
-        func = DLL ? (cfunction) GetProcAddressA(DLL, #NAME) : NULL; \
-        func = func ? func : (cfunction) &NAME; \
+        func = DLL ? (CFunction) GetProcAddressA(DLL, #NAME) : NULL; \
+        func = func ? func : (CFunction) &NAME; \
         lua_pushcfunction(L, (lua_CFunction) func); \
         lua_rawset(L, -3)
 
@@ -369,7 +369,7 @@ static void* reserve_code(struct jit* jit, lua_State* L, size_t sz)
 
             } else {
                 lua_getfield(L, -1, extnames[i]);
-                func = (cfunction) lua_tocfunction(L, -1);
+                func = (CFunction) lua_tocfunction(L, -1);
 
                 if (func == NULL) {
                     luaL_error(L, "internal error: missing link for %s", extnames[i]);
@@ -410,13 +410,13 @@ static void commit_code(struct jit* jit, void* code, size_t sz)
 /* push_func_ref pushes a copy of the upval table embedded in the compiled
  * function func.
  */
-void push_func_ref(lua_State* L, cfunction func)
+void push_func_ref(lua_State* L, CFunction func)
 {
     struct jit_head* h = ((struct jit_head*) func) - 1;
     lua_rawgeti(L, LUA_REGISTRYINDEX, h->ref);
 }
 
-void free_code(struct jit* jit, lua_State* L, cfunction func)
+void free_code(struct jit* jit, lua_State* L, CFunction func)
 {
     size_t i;
     struct jit_head* h = ((struct jit_head*) func) - 1;

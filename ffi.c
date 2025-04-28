@@ -28,6 +28,28 @@ int next_unnamed_key;
 int niluv_key;
 int asmname_key;
 
+
+int lua_absindex2(lua_State* L, int idx) {
+	return (LUA_REGISTRYINDEX <= idx && idx < 0)
+		 ? lua_gettop(L) + idx + 1
+		 : idx;
+}
+
+#if LUA_VERSION_NUM >= 503
+void (lua_remove)(lua_State *L, int idx) {
+	lua_remove(L, idx);
+}
+#endif
+
+#ifdef HAVE_COMPLEX
+complex_double mk_complex_double(double real, double imag) { return real + imag * 1i; }
+//complex_double mk_complex_double(double real, double imag) { return __builtin_complex(real, imag); }
+complex_double mk_complex_float(double real, double imag) { return real + imag * 1i; }
+#else
+complex_double mk_complex_double(double real, double imag) { return complex_double{ real, imag }; }
+complex_float mk_complex_float(double real, double imag) { return complex_float{ real, imag }; }
+#endif
+
 /*
 Sets stack[tableLoc][key] = boolean(value)
 Leaves the stack.
@@ -235,13 +257,13 @@ static int64_t check_intptr(lua_State* L, int idx, void* p, CType* ct)
 	}
 }
 
-static int get_cfunction_address(lua_State* L, int idx, cfunction* addr);
+static int get_cfunction_address(lua_State* L, int idx, CFunction* addr);
 
 #define TO_NUMBER(TYPE, ALLOW_POINTERS, LUA_TONUMBER)	                   \
 	TYPE ret = 0;                                                           \
 	void* p;                                                                \
 	CType ct;                                                        \
-	cfunction f;                                                            \
+	CFunction f;                                                            \
 	                                                                        \
 	switch (lua_type(L, idx)) {                                             \
 	case LUA_TBOOLEAN:                                                      \
@@ -716,7 +738,7 @@ Leaves the stack.
 static int get_cfunction_address(
 	lua_State* L,
 	int idx,
-	cfunction* addr
+	CFunction* addr
 ) {						// stack: ...
 printf("beg top: %d\n", lua_gettop(L));
 	if (!lua_isfunction(L, idx)) return 0;
@@ -729,7 +751,7 @@ printf("beg top: %d\n", lua_gettop(L));
 	}
 
 	// gets the n-1'th (suprema key) upvalue
-	// Why?  Why would there be any more than one callbacks stored as upvalues of the cfunction cdata?
+	// Why?  Why would there be any more than one callbacks stored as upvalues of the CFunction cdata?
 	if (!lua_getupvalue(L, idx, n - 1)) {
 		return 0;						// stack: ...
 	}									// stack: ..., up = stack[idx]'s upvalue[n-1]
@@ -745,7 +767,7 @@ printf("beg top: %d\n", lua_gettop(L));
 		return 0;
 	}									// stack: ..., up, mt, registry[&callback_mt_key]
 
-	cfunction * f = (cfunction *)lua_touserdata(L, -3);	// stack: ..., up, mt, registry[&callback_mt_key]
+	CFunction * f = (CFunction *)lua_touserdata(L, -3);	// stack: ..., up, mt, registry[&callback_mt_key]
 	*addr = f[1];
 	lua_pop(L, 3);						// stack: ...
 printf("end top: %d\n", lua_gettop(L));
@@ -754,11 +776,11 @@ printf("end top: %d\n", lua_gettop(L));
 
 /* to_cfunction converts a value at idx with usr table at to_usr and type tt
  * into a function. Leaves the stack unchanged. */
-static cfunction check_cfunction(lua_State* L, int idx, int to_usr, const CType* tt, int check_pointers)
+static CFunction check_cfunction(lua_State* L, int idx, int to_usr, const CType* tt, int check_pointers)
 {
 	void* p;
 	CType ft;
-	cfunction f;
+	CFunction f;
 	int top = lua_gettop(L);
 
 	idx = lua_absindex(L, idx);
@@ -786,7 +808,7 @@ static cfunction check_cfunction(lua_State* L, int idx, int to_usr, const CType*
 		if (check_pointers) {
 			goto err;
 		} else {
-			return (cfunction) lua_touserdata(L, idx);
+			return (CFunction) lua_touserdata(L, idx);
 		}
 
 	case LUA_TUSERDATA:
@@ -798,7 +820,7 @@ static cfunction check_cfunction(lua_State* L, int idx, int to_usr, const CType*
 				goto err;
 			} else {
 				lua_pop(L, 1);
-				return (cfunction) lua_touserdata(L, idx);
+				return (CFunction) lua_touserdata(L, idx);
 			}
 
 		} else if (ft.is_null) {
@@ -807,14 +829,14 @@ static cfunction check_cfunction(lua_State* L, int idx, int to_usr, const CType*
 
 		} else if (!check_pointers && (ft.pointers || ft.type == INTPTR_TYPE)) {
 			lua_pop(L, 1);
-			return (cfunction) *(void**) p;
+			return (CFunction) *(void**) p;
 
 		} else if (ft.type != FUNCTION_PTR_TYPE) {
 			goto err;
 
 		} else if (!check_pointers) {
 			lua_pop(L, 1);
-			return *(cfunction*) p;
+			return *(CFunction*) p;
 
 		} else if (ft.calling_convention != tt->calling_convention) {
 			goto err;
@@ -824,7 +846,7 @@ static cfunction check_cfunction(lua_State* L, int idx, int to_usr, const CType*
 
 		} else {
 			lua_pop(L, 1);
-			return *(cfunction*) p;
+			return *(CFunction*) p;
 		}
 
 	default:
@@ -837,8 +859,8 @@ err:
 }
 
 /* to_type_cfunction converts a value at idx with uv at to_usr and type tt to
- * a cfunction. Leaves the stack unchanged. */
-cfunction check_typed_cfunction(lua_State* L, int idx, int to_usr, const CType* tt)
+ * a CFunction. Leaves the stack unchanged. */
+CFunction check_typed_cfunction(lua_State* L, int idx, int to_usr, const CType* tt)
 { return check_cfunction(L, idx, to_usr, tt, 1); }
 
 static void set_value(lua_State* L, int idx, void* to, int to_usr, const CType* tt, int check_pointers);
@@ -1104,7 +1126,7 @@ static void set_value(lua_State* L, int idx, void* to, int to_usr, const CType* 
 			uint64_t u64;
 			float f;
 			double d;
-			cfunction func;
+			CFunction func;
 		} misalign;
 
 		void* origto = to;
@@ -1165,7 +1187,7 @@ static void set_value(lua_State* L, int idx, void* to, int to_usr, const CType* 
 			*(int32_t*) to = check_enum(L, idx, to_usr, tt);
 			break;
 		case FUNCTION_PTR_TYPE:
-			*(cfunction*) to = check_cfunction(L, idx, to_usr, tt, check_pointers);
+			*(CFunction*) to = check_cfunction(L, idx, to_usr, tt, check_pointers);
 			break;
 		default:
 			goto err;
@@ -1273,10 +1295,10 @@ static int do_new(
 		(lua_isnil(L, 2) || lua_isfunction(L, 2))
 	) {
 		// Get the bound C function if this is a ffi lua function
-		cfunction func;
+		CFunction func;
 		if (get_cfunction_address(L, 2, &func)) {
 			void * p = push_cdata(L, -1, &ct);
-			*(cfunction *)p = func;
+			*(CFunction *)p = func;
 			return 1;
 		}
 
@@ -1491,7 +1513,7 @@ static int cdata_gc(lua_State* L)
 
 static int callback_free(lua_State* L)
 {
-	//cfunction* p = (cfunction*) lua_touserdata(L, 1);
+	//CFunction* p = (CFunction*) lua_touserdata(L, 1);
 	// FIXME: temporarily disabled to prevent SIGTRAP on exit
 	// free_code(get_jit(L), L, *p);
 	return 0;
@@ -1500,7 +1522,7 @@ static int callback_free(lua_State* L)
 static int cdata_free(lua_State* L)
 {
 	CType ct;
-	cfunction* p = (cfunction*) check_cdata(L, 1, &ct);
+	CFunction* p = (CFunction*) check_cdata(L, 1, &ct);
 	lua_settop(L, 1);
 
 	/* unset the closure */
@@ -1519,7 +1541,7 @@ static int cdata_free(lua_State* L)
 static int cdata_set(lua_State* L)
 {
 	CType ct;
-	cfunction* p = (cfunction*) check_cdata(L, 1, &ct);
+	CFunction* p = (CFunction*) check_cdata(L, 1, &ct);
 	luaL_checktype(L, 2, LUA_TFUNCTION);
 
 	if (!ct.is_jitted) {
@@ -1544,7 +1566,7 @@ static int cdata_set(lua_State* L)
 }
 
 /*
-stack[1] is the check_cdata/cfunction object ...
+stack[1] is the check_cdata/CFunction object ...
 	... that a few lines later it calls "closures" ...
 	... cmodule_call says "ct_usr" ...
 upvalue[1] of stack[1] is ... a lua_CFunction ... of ...
@@ -1552,7 +1574,7 @@ upvalue[1] of stack[1] is ... a lua_CFunction ... of ...
 static int cdata_call(lua_State* L) {
 	int top = lua_gettop(L);				// stack: f, ...
 	CType ct;
-	cfunction * p = (cfunction *)check_cdata(L, 1, &ct);	// stack: f, ..., 
+	CFunction * p = (CFunction *)check_cdata(L, 1, &ct);	// stack: f, ..., 
 
 	if (push_user_mt(L, -1, &ct)) {
 		lua_pushliteral(L, "__call");
@@ -1891,8 +1913,8 @@ err:
 		return 1;
 
 	} else if (ct.type == FUNCTION_PTR_TYPE) {
-		cfunction* pf = (cfunction*) push_cdata(L, -1, &ct);
-		*pf = *(cfunction*) data;
+		CFunction* pf = (CFunction*) push_cdata(L, -1, &ct);
+		*pf = *(CFunction*) data;
 		return 1;
 
 	} else {
@@ -3040,7 +3062,7 @@ static int cmodule_index(lua_State* L)
 	assert(lua_gettop(L) == 3); /* module, name, ct_usr */
 
 	if (ct.type == FUNCTION_TYPE) {
-		compile_function(L, (cfunction) sym, -1, &ct);
+		compile_function(L, (CFunction) sym, -1, &ct);
 		assert(lua_gettop(L) == 4); /* module, name, ct_usr, function */
 
 		/* set module usr value[luaname] = function to cache for next time */
@@ -3341,7 +3363,7 @@ static void push_builtin(
 Same exact thing as push_builtin except size, align, is_unsigned default to zero.
 Except here no uservalue is ever created for the ct userdata copy, even if the type is complex.
 */
-static void push_builtin_undef(
+inline void push_builtin_undef(
 	lua_State* L,
 	CType* ct,
 	const char* name,

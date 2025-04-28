@@ -149,7 +149,7 @@ size_t ctype_size(lua_State* L, const CType* ct) {
 }
 
 /*
-Creates a new `struct cdata` userdata,
+Creates a new `CData` userdata,
 Sets its metatable to registry[cdata_mt_key]
 If `ct_usr` is nonzero then assigns it's 0th uservalue to `stack[ct_usr]`
 ... what is the uservalue of cdata userdata supposed to be?
@@ -175,8 +175,8 @@ void * push_cdata(
 		sz = ALIGN_UP(sz, 7);
 	}
 
-	struct cdata * cd = (struct cdata *)lua_newuserdata(L, sizeof(struct cdata) + sz);
-										// stack: ..., u = userdata of {struct cdata, byte[sz]}
+	CData * cd = (CData *)lua_newuserdata(L, sizeof(CData) + sz);
+										// stack: ..., u = userdata of {CData, byte[sz]}
 	cd->type = *ct;
 	memset(cd+1, 0, sz);
 
@@ -209,9 +209,9 @@ void * push_cdata(
 	return cd+1;
 }
 
-void push_callback(lua_State* L, cfunction luafunc, cfunction cfunc)
+void push_callback(lua_State* L, CFunction luafunc, CFunction cfunc)
 {
-	cfunction* pf = (cfunction*) lua_newuserdata(L, 2 * sizeof(cfunction));
+	CFunction* pf = (CFunction*) lua_newuserdata(L, 2 * sizeof(CFunction));
 	pf[0] = luafunc;
 	pf[1] = cfunc;
 
@@ -262,7 +262,7 @@ void check_ctype(
 }
 
 /* 
-to_cdata returns the struct cdata* and pushes the user value onto the stack.
+to_cdata returns the CData* and pushes the user value onto the stack.
 If the index is not a ctype then ct is set to the zero value such
 that ct->type is INVALID_TYPE, a nil is pushed, and NULL is returned.
 */
@@ -283,7 +283,7 @@ void * to_cdata(lua_State* L, int idx, CType* ct) {
 	}
 
 	lua_pop(L, 1);									// stack: ...
-	struct cdata * cd = (struct cdata *)lua_touserdata(L, idx);
+	CData * cd = (CData *)lua_touserdata(L, idx);
 	*ct = cd->type;
 	lua_getuservalue(L, idx);						// stack: ..., stack[idx]'s uservalue 0
 
@@ -297,7 +297,7 @@ void * to_cdata(lua_State* L, int idx, CType* ct) {
 }
 
 /*
-check_cdata returns the struct cdata* and pushes the user value onto the stack.
+check_cdata returns the CData* and pushes the user value onto the stack.
 Also dereferences references. 
 */
 void * check_cdata(

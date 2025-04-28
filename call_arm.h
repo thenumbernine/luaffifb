@@ -605,7 +605,7 @@ static const char *const extnames[] = {
 #define MAX_BRANCH ((INT32_MAX) >> 8)
 #define BRANCH_OFF 4
 
-static void compile_extern_jump(struct jit* jit, lua_State* L, cfunction func, uint8_t* code)
+static void compile_extern_jump(struct jit* jit, lua_State* L, CFunction func, uint8_t* code)
 {
     /* The jump code is the function pointer followed by a stub to call the
      * function pointer. The stub exists so we can jump to functions with an
@@ -614,7 +614,7 @@ static void compile_extern_jump(struct jit* jit, lua_State* L, cfunction func, u
      * Note we have to manually set this up since there are commands buffered
      * in the jit state.
      */
-    *(cfunction*) code = func;
+    *(CFunction*) code = func;
     /* ldr pc, [pc - 12] */
     *(uint32_t*) &code[4] = 0xE51FF00CU;
 }
@@ -627,7 +627,7 @@ void compile_globals(struct jit* jit, lua_State* L)
     (void) jit;
 }
 
-cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
+CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 {
     struct jit* Dst = get_jit(L);;
     int i, nargs, num_upvals, ref;
@@ -812,14 +812,14 @@ cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
     {
         void* p;
         CType ft;
-        cfunction func;
+        CFunction func;
 
         func = compile(Dst, L, NULL, ref);
 
         ft = *ct;
         ft.is_jitted = 1;
         p = push_cdata(L, ct_usr, &ft);
-        *(cfunction*) p = func;
+        *(CFunction*) p = func;
 
         assert(lua_gettop(L) == top + 1);
 
@@ -827,7 +827,7 @@ cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
     }
 }
 
-void compile_function(lua_State* L, cfunction func, int ct_usr, const CType* ct)
+void compile_function(lua_State* L, CFunction func, int ct_usr, const CType* ct)
 {
     struct jit* Dst = get_jit(L);;
     int i, nargs, num_upvals;
@@ -840,7 +840,7 @@ void compile_function(lua_State* L, cfunction func, int ct_usr, const CType* ct)
     nargs = (int) lua_rawlen(L, ct_usr);
 
     p = push_cdata(L, ct_usr, ct);
-    *(cfunction*) p = func;
+    *(CFunction*) p = func;
     num_upvals = 1;
 
     dasm_setup(Dst, build_actionlist);

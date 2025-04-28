@@ -331,7 +331,7 @@
 #define MAX_BRANCH INT32_MAX
 #define BRANCH_OFF 4
 
-static void compile_extern_jump(struct jit* jit, lua_State* L, cfunction func, uint8_t* code)
+static void compile_extern_jump(struct jit* jit, lua_State* L, CFunction func, uint8_t* code)
 {
     /* The jump code is the function pointer followed by a stub to call the
      * function pointer. The stub exists in 64 bit so we can jump to functions
@@ -348,12 +348,12 @@ static void compile_extern_jump(struct jit* jit, lua_State* L, cfunction func, u
      * bit displacement
      */
 #if defined _WIN64 || defined __amd64__
-    *(cfunction*) code = func;
+    *(CFunction*) code = func;
     code[8] = 0xFF; /* FF /4 operand for jmp */
     code[9] = 0x25; /* RIP displacement */
     *(int32_t*) &code[10] = -14;
 #else
-    *(cfunction*) code = func;
+    *(CFunction*) code = func;
 #endif
 }
 
@@ -405,7 +405,7 @@ int x86_return_size(lua_State* L, int usr, const CType* ct)
                     ret += sizeof(intptr_t);
                     break;
                 case FUNCTION_PTR_TYPE:
-                    ret += sizeof(cfunction);
+                    ret += sizeof(CFunction);
                     break;
                 case BOOL_TYPE:
                 case FLOAT_TYPE:
@@ -646,10 +646,10 @@ static void add_float(Dst_DECL, const CType* ct, struct reg_alloc* reg, int is_d
 #define get_pointer(jit, ct, reg) get_int(jit, ct, reg, 0)
 #endif
 
-cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
+CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 {
     int i, nargs;
-    cfunction* pf;
+    CFunction* pf;
     CType ct2 = *ct;
     const CType* mt;
     struct reg_alloc reg;
@@ -1038,7 +1038,7 @@ cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
     assert(lua_gettop(L) == top);
 
     ct2.is_jitted = 1;
-    pf = (cfunction*) push_cdata(L, ct_usr, &ct2);
+    pf = (CFunction*) push_cdata(L, ct_usr, &ct2);
     *pf = compile(Dst, L, NULL, ref);
 
     assert(lua_gettop(L) == top + 1);
@@ -1046,7 +1046,7 @@ cfunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
     return *pf;
 }
 
-void compile_function(lua_State* L, cfunction func, int ct_usr, const CType* ct)
+void compile_function(lua_State* L, CFunction func, int ct_usr, const CType* ct)
 {
     size_t i, nargs;
     int num_upvals;
@@ -1065,7 +1065,7 @@ void compile_function(lua_State* L, cfunction func, int ct_usr, const CType* ct)
     dasm_setup(Dst, build_actionlist);
 
     p = push_cdata(L, ct_usr, ct);
-    *(cfunction*) p = func;
+    *(CFunction*) p = func;
     num_upvals = 1;
 
     nargs = lua_rawlen(L, ct_usr);
@@ -1476,7 +1476,7 @@ void compile_function(lua_State* L, cfunction func, int ct_usr, const CType* ct)
             | get_errno
             | call_rrp extern push_cdata, L_ARG, lua_upvalueindex(num_upvals), mbr_ct
             | mov rcx, [rsp+32]
-            | mov [rax], rcx // *(cfunction**) cdata = val
+            | mov [rax], rcx // *(CFunction**) cdata = val
             | lua_return_arg
             break;
 
@@ -1635,7 +1635,7 @@ void compile_function(lua_State* L, cfunction func, int ct_usr, const CType* ct)
 
     assert(lua_gettop(L) == top + num_upvals);
     {
-        cfunction f = compile(Dst, L, func, LUA_NOREF);
+        CFunction f = compile(Dst, L, func, LUA_NOREF);
         /* add a callback as an upval so that the jitted code gets cleaned up when
          * the function gets gc'd */
         push_callback(L, f, func);

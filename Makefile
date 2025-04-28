@@ -20,7 +20,7 @@ CFLAGS+= -fPIC
 # if it's Linux ...
 #LDFLAGS+= -shared
 # if OSX ...
-#CFLAGS+= -Wall
+CFLAGS+= -Wall
 LDFLAGS+= -dynamiclib -undefined dynamic_lookup -flat_namespace
 
 #if it's debug
