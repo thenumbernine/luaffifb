@@ -8,6 +8,7 @@
  */
 #include "ffi.h"
 #include "parser.h"
+#include "ctype.h"
 
 #define IS_CONST(tok) (IS_LITERAL(tok, "const") || IS_LITERAL(tok, "__const") || IS_LITERAL(tok, "__const__"))
 #define IS_VOLATILE(tok) (IS_LITERAL(tok, "volatile") || IS_LITERAL(tok, "__volatile") || IS_LITERAL(tok, "__volatile__"))

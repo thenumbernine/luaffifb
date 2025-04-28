@@ -7,6 +7,7 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 #include "ffi.h"
+#include "ctype.h"
 #include "parser.h"
 #include <math.h>
 #include <inttypes.h>

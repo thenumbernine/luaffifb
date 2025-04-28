@@ -42,6 +42,8 @@ extern "C" {
 #include <sys/mman.h>
 #endif
 
+#include "ffi_complex.h"
+
 #define HAVE_LONG_DOUBLE
 
 #ifndef NDEBUG
@@ -361,20 +363,9 @@ typedef struct {
 	  ;
 } CData;
 
-typedef void (*CFunction)();
-
-#include "ffi_complex.h"
+#include "types.h"
 
 #define CALLBACK_FUNC_USR_IDX 1
-
-void set_defined(lua_State* L, int ct_usr, CType* ct);
-CType* push_ctype(lua_State* L, int ct_usr, const CType* ct);
-void* push_cdata(lua_State* L, int ct_usr, const CType* ct); /* called from asm */
-void push_callback(lua_State* L, CFunction luafunc, CFunction cfunc);
-void check_ctype(lua_State* L, int idx, CType* ct);
-void* to_cdata(lua_State* L, int idx, CType* ct);
-void* check_cdata(lua_State* L, int idx, CType* ct);
-size_t ctype_size(lua_State* L, const CType* ct);
 
 void push_type_name(lua_State* L, int usr, const CType* ct);
 

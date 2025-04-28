@@ -5,6 +5,8 @@
 ** DO NOT EDIT! The original file is in "call_x86.dasc".
 */
 
+#include "ctype.h"
+
 #if DASM_VERSION != 10300
 #error "Version mismatch between DynASM and included encoding engine"
 #endif
