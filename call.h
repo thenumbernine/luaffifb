@@ -2,7 +2,23 @@
 
 #include "lua.h"	//lua_State.h
 #include "types.h"	//CFunction
-#include "ffi.h"	//CType, JIT
+#include "ffi.h"	//CType
+
+struct Page;		// defined in call.h, used in call.c and ffi.c
+struct DASMState;	// defined in dynasm/dasm_*.h
+
+typedef struct JIT {
+	lua_State* L;
+	int32_t last_errno;
+	struct DASMState* ctx;
+	size_t pagenum;
+	struct Page** pages;
+	size_t align_page_size;
+	void** globals;
+	int function_extern;
+	void* lua_dll;
+	void* kernel32_dll;
+} JIT;
 
 #define DASM_EXTERN(a,b,c,d) get_extern(a,b,c,d)
 
@@ -14,6 +30,7 @@ typedef struct Page {
 	size_t freed;
 } Page;
 
+JIT* get_jit(lua_State* L);
 void compile_globals(JIT* jit, lua_State* L);
 CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct);
 void compile_function(lua_State* L, CFunction f, int ct_usr, const CType* ct);
@@ -30,6 +47,5 @@ void free_code(JIT* jit, lua_State* L, CFunction func);
 // used in call_x64.dasc and its generated headers
 // and dynasm/dasm_arm.h dynasm/dasm_x86.h dynasm/dasm_ppc.h dynasm/dasm_proto.h
 // so same once again, it goes here
-struct JIT;
-#define Dst_DECL	struct JIT* Dst
+#define Dst_DECL	JIT* Dst
 #define Dst_REF		(Dst->ctx)

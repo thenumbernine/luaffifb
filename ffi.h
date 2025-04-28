@@ -34,9 +34,6 @@
 
 #define HAVE_LONG_DOUBLE
 
-#ifndef NDEBUG
-#define DASM_CHECKS
-#endif
 
 #if defined LUA_FFI_BUILD_AS_DLL
 # define EXPORT __declspec(dllexport)
@@ -53,6 +50,7 @@
 #endif
 
 EXTERN_C EXPORT int luaopen_ffi(lua_State* L);
+
 
 // architectures
 #if defined _WIN32 && defined UNDER_CE
@@ -131,22 +129,6 @@ EXTERN_C EXPORT int luaopen_ffi(lua_State* L);
 #define ALLOW_MISALIGNED_ACCESS
 #endif
 
-struct Page;		// defined in call.h, used in call.c and ffi.c
-struct DASMState;	// defined in dynasm/dasm_*.h
-
-typedef struct JIT {
-	lua_State* L;
-	int32_t last_errno;
-	struct DASMState* ctx;
-	size_t pagenum;
-	struct Page** pages;
-	size_t align_page_size;
-	void** globals;
-	int function_extern;
-	void* lua_dll;
-	void* kernel32_dll;
-} JIT;
-
 #define ALIGN_DOWN(PTR, MASK) \
   (((uintptr_t) (PTR)) & (~ ((uintptr_t) (MASK)) ))
 #define ALIGN_UP(PTR, MASK) \
@@ -185,7 +167,6 @@ extern int asmname_key;
 int equalsRegistry(lua_State* L, int idx, void * key);
 void pushRegistry(lua_State* L, void * key);
 void setRegistry(lua_State* L, void * key);
-JIT* get_jit(lua_State* L);
 
 /* both ctype and cdata are stored as userdatas
  *

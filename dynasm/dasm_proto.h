@@ -12,6 +12,10 @@
 #include <stddef.h>
 #include <stdarg.h>
 
+#ifndef NDEBUG
+#define DASM_CHECKS
+#endif
+
 #ifndef DASM_FDEF
 #define DASM_FDEF	extern
 #endif

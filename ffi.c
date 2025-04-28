@@ -99,20 +99,6 @@ int equalsRegistry(lua_State* L, int idx, void * key)
 	return ret;
 }
 
-/*
-Get the JIT* userdata of registry[&jit_key].
-Update the jit->L lua State to the arg passed.
-Leaves the stack the same.
-*/
-JIT* get_jit(lua_State* L) {
-	JIT* jit;							// stack: ...
-	pushRegistry(L, &jit_key);					// stack: ..., registry[&jit_key]=jit
-	jit = (JIT*) lua_touserdata(L, -1);
-	jit->L = L;									// update Lua state
-	lua_pop(L, 1);								// stack: ...
-	return jit;
-}
-
 static int type_error(lua_State* L, int idx, const char* to_type, int to_usr, const CType* to_ct)
 {
 	luaL_Buffer B;

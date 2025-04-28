@@ -9,6 +9,9 @@
 #include "ffi.h"
 #include "call.h"
 
+// has DASM_CHECKS in it which sometimes is used by the dynasm/dasc_*.h files included below
+#include "dynasm/dasm_proto.h"
+
 // has to be here to define DASM_M_GROW & DASM_M_FREE
 // has to have call.h before it in order to define Dst_DECL & Dst_REF
 #include "dynasm/dasm_internal.h"
@@ -32,6 +35,21 @@ static void SetLastError(int err) { errno = err; }
 #else
 #define shred(p,s,e) memset((uint8_t*)(p)+(s),0xCC,(e)-(s))
 #endif
+
+/*
+Get the JIT* userdata of registry[&jit_key].
+Update the jit->L lua State to the arg passed.
+Leaves the stack the same.
+*/
+JIT* get_jit(lua_State* L) {
+	JIT* jit;							// stack: ...
+	pushRegistry(L, &jit_key);					// stack: ..., registry[&jit_key]=jit
+	jit = (JIT*) lua_touserdata(L, -1);
+	jit->L = L;									// update Lua state
+	lua_pop(L, 1);								// stack: ...
+	return jit;
+}
+
 
 #ifdef __wasm__
 
