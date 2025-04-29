@@ -225,6 +225,8 @@ int check_bool(lua_State* L, int idx);
 double check_double(lua_State* L, int idx);
 double check_complex_imag(lua_State* L, int idx);
 float check_float(lua_State* L, int idx);
+int64_t cast_int64(lua_State* L, int idx, int is_cast);
+uint64_t cast_uint64(lua_State* L, int idx, int is_cast);
 uint64_t check_uint64(lua_State* L, int idx);
 int64_t check_int64(lua_State* L, int idx);
 int32_t check_int32(lua_State* L, int idx);

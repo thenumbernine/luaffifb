@@ -41,8 +41,6 @@ JIT* get_jit(lua_State* L) {
 
 // I would use ffi_raw but it doesn't have double, so here I'm making my own ...
 typedef union {
-	int8_t int8Value;
-	uint8_t uint8Value;
 	intptr_t intptrValue;
 	uintptr_t uintptrValue;
 	float floatValue;
@@ -165,17 +163,19 @@ DEBUGPRINT("...callInfo %p\n", callInfo);
 #if defined(DEBUG_LOG)
 push_type_name(L, -1, argCType);
 DEBUGPRINT("...setting arg #%d @%p of luaffi-type=%s libffi-type-ptr=%p\n", i, argValue, lua_tostring(L, -1), callInfo->cif.arg_types[i-1]);
-lua_pop(L, 1);			// pop typename 
+lua_pop(L, 1);			// pop typename
 #endif
 
+DEBUGPRINT("BEGIN READ ARG VALUE\n");
 		if (argCType->pointers || argCType->is_reference) {
-			argValue->ptr = (void*)check_uint64(L, i);
+DEBUGPRINT("...pointer or reference...\n");
+			argValue->ptr = (void*)cast_uint64(L, i, 1);
 		} else {
 			// TODO don't just reuse uint64 for everything, what if the endian-ness is opposite x64?
 			switch (argCType->type) {
 			case FUNCTION_PTR_TYPE:
 DEBUGPRINT("...FUNCTION_PTR_TYPE...\n");
-				argValue->ptr = (void*)check_uint64(L, i);
+				argValue->ptr = (void*)cast_uint64(L, i, 1);
 DEBUGPRINT("...%p\n", argValue->ptr);
 				break;
 			case ENUM_TYPE:
@@ -185,56 +185,56 @@ DEBUGPRINT("...%ld\n", argValue->intptrValue);
 				break;
 			case BOOL_TYPE:
 DEBUGPRINT("...BOOL_TYPE...\n");
-				argValue->intptrValue = (check_int64(L, i) != 0);
+				argValue->intptrValue = (cast_int64(L, i, 1) != 0);
 DEBUGPRINT("...%ld\n", argValue->intptrValue);
 				break;
 			case INT8_TYPE:
 DEBUGPRINT("...INT8_TYPE...\n");
 				if (argCType->is_unsigned) {
-					argValue->uint8Value = check_uint32(L, i);
-DEBUGPRINT("...%u\n", argValue->uint8Value);
+					argValue->uintptrValue = cast_uint64(L, i, 1);
+DEBUGPRINT("...%lu\n", argValue->uintptrValue);
 				} else {
-					argValue->int8Value = check_int32(L, i);
-DEBUGPRINT("...%d\n", argValue->int8Value);
+					argValue->intptrValue = cast_int64(L, i, 1);
+DEBUGPRINT("...%ld\n", argValue->intptrValue);
 				}
 				break;
 			case INT16_TYPE:
 DEBUGPRINT("...INT16_TYPE...\n");
 				if (argCType->is_unsigned) {
-					argValue->uintptrValue = check_uint64(L, i);
+					argValue->uintptrValue = cast_uint64(L, i, 1);
 DEBUGPRINT("...%lu\n", argValue->uintptrValue);
 				} else {
-					argValue->intptrValue = check_int64(L, i);
+					argValue->intptrValue = cast_int64(L, i, 1);
 DEBUGPRINT("...%ld\n", argValue->intptrValue);
 				}
 				break;
 			case INT32_TYPE:
 DEBUGPRINT("...INT32_TYPE...\n");
 				if (argCType->is_unsigned) {
-					argValue->uintptrValue = check_uint64(L, i);
+					argValue->uintptrValue = cast_uint64(L, i, 1);
 DEBUGPRINT("...%lu\n", argValue->uintptrValue);
 				} else {
-					argValue->intptrValue = check_int64(L, i);
+					argValue->intptrValue = cast_int64(L, i, 1);
 DEBUGPRINT("...%ld\n", argValue->intptrValue);
 				}
 				break;
 			case INT64_TYPE:
 DEBUGPRINT("...INT64_TYPE...\n");
 				if (argCType->is_unsigned) {
-					argValue->uintptrValue = check_uint64(L, i);
+					argValue->uintptrValue = cast_uint64(L, i, 1);
 DEBUGPRINT("...%lu\n", argValue->uintptrValue);
 				} else {
-					argValue->intptrValue = check_int64(L, i);
+					argValue->intptrValue = cast_int64(L, i, 1);
 DEBUGPRINT("...%ld\n", argValue->intptrValue);
 				}
 				break;
 			case INTPTR_TYPE:
 DEBUGPRINT("...INTPTR_TYPE...\n");
 				if (argCType->is_unsigned) {
-					argValue->uintptrValue = check_uint64(L, i);
+					argValue->uintptrValue = cast_uint64(L, i, 1);
 DEBUGPRINT("...%lu\n", argValue->uintptrValue);
 				} else {
-					argValue->intptrValue = check_int64(L, i);
+					argValue->intptrValue = cast_int64(L, i, 1);
 DEBUGPRINT("...%ld\n", argValue->intptrValue);
 				}
 				break;
@@ -262,7 +262,8 @@ DEBUGPRINT("...%f %f\n", creal(argValue->complex_doubleValue), cimag(argValue->c
 				luaL_error(L, "NYI: call type");
 			}
 		}
-		
+DEBUGPRINT("END READ ARG VALUE\n");
+
 		lua_pop(L, 1);			// stack: closure_func, args..., args[i]'s CType's userdata
 		lua_pop(L, 1);			// stack: closure_func, args...
 	}
@@ -454,11 +455,12 @@ DEBUGPRINT("...callInfo %p\n", callInfo);
 		CType const * argCType = (CType const *)lua_touserdata(L, -1);
 		callInfo->argTypes[i-1] = getFFITypeForCType(L, argCType);
 #if defined(DEBUG_LOG)
-DEBUGPRINT("args[%d] setting libffi-type-ptr=%p libffi-type=%d\n", i, callInfo->argTypes[i-1], callInfo->argTypes[i-1]->type);
-print_type(L, argCType);
-DEBUGPRINT("... for CType %s\n", lua_tostring(L, -1));
-lua_pop(L, 1);
-#endif		
+//print_type(L, argCType);	// overly cmoplex and worthless
+lua_getuservalue(L, -1);
+push_type_name(L, -1, argCType);
+DEBUGPRINT("args[%d] setting luaffi-type-name=%s libffi-type-ptr=%p libffi-type=%d\n", i, lua_tostring(L, -1), callInfo->argTypes[i-1], callInfo->argTypes[i-1]->type);
+lua_pop(L, 2);	// typename string & arg's ctype's userdata's uservalue
+#endif
 		lua_pop(L, 1);
 	}
 
@@ -466,11 +468,12 @@ lua_pop(L, 1);
 	CType const * retCType = (CType const *)lua_touserdata(L, -1);
 	callInfo->retType = getFFITypeForCType(L, retCType);
 #if defined(DEBUG_LOG)
-DEBUGPRINT("return libffi-type-ptr=%p libffi-type=%d\n", callInfo->retType, callInfo->retType->type);
-print_type(L, retCType);
-DEBUGPRINT("... for CType %s\n", lua_tostring(L, -1));
-lua_pop(L, 1);
-#endif	
+//print_type(L, retCType);
+lua_getuservalue(L, -1);
+push_type_name(L, -1, retCType);
+DEBUGPRINT("return luaffi-type-name=%s libffi-type-ptr=%p libffi-type=%d\n", lua_tostring(L, -1), callInfo->retType, callInfo->retType->type);
+lua_pop(L, 2);	// typename string & arg's ctype's userdata's uservalue
+#endif
 	lua_pop(L, 1);
 
 

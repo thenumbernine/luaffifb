@@ -359,7 +359,10 @@ for convention,c in pairs(dlls) do
     check(c.inc_e8('FOO8'), c.BAR8)
     check(c.inc_e16(c.FOO16), c.BAR16)
     check(c.inc_e32(c.FOO32), c.BAR32)
-    check(c.ret_fp(c.g_fp), c.g_fp)
+print('g_fp', c.g_fp)
+print('ret_fp', c.ret_fp)
+print('ret_fp2', c.ret_fp2)
+	check(c.ret_fp(c.g_fp), c.g_fp)
     check(c.ret_fp2(c.g_fp), c.g_fp)
 
     if c.have_complex() then
@@ -902,7 +905,7 @@ if _VERSION ~= 'Lua 5.1' then
     x, y = pairs(v)
     assert(x == 1 and y == 2)
     x, y = ipairs(v)
-    assert(x == 2 and y == 3)		-- failing 
+    assert(x == 2 and y == 3)		-- failing
 end
 
 -- test for pointer to struct having same metamethods

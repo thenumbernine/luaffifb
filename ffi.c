@@ -101,9 +101,6 @@ int equalsRegistry(lua_State* L, int idx, void * key)
 
 static int type_error(lua_State* L, int idx, const char* to_type, int to_usr, const CType* to_ct)
 {
-	luaL_Buffer B;
-	CType ft;
-
 	assert(to_type || (to_usr && to_ct));
 	if (to_usr) {
 		to_usr = lua_absindex(L, to_usr);
@@ -111,7 +108,10 @@ static int type_error(lua_State* L, int idx, const char* to_type, int to_usr, co
 
 	idx = lua_absindex(L, idx);
 
+	luaL_Buffer B;
 	luaL_buffinit(L, &B);
+
+	CType ft;
 	to_cdata(L, idx, &ft);
 
 	if (ft.type != INVALID_TYPE) {
@@ -302,11 +302,11 @@ static int get_cfunction_address(lua_State* L, int idx, CFunction* addr);
 	    type_error(L, idx, #TYPE, 0, NULL);                                 \
 	}                                                                       \
 
-static int64_t cast_int64(lua_State* L, int idx, int is_cast) {
+int64_t cast_int64(lua_State* L, int idx, int is_cast) {
 	TO_NUMBER(int64_t, is_cast, lua_tointeger); return ret;
 }
 
-static uint64_t cast_uint64(lua_State* L, int idx, int is_cast) {
+uint64_t cast_uint64(lua_State* L, int idx, int is_cast) {
 	TO_NUMBER(uint64_t, is_cast, lua_tointeger); return ret;
 }
 
@@ -414,6 +414,10 @@ static size_t unpack_vararg(lua_State* L, int i, char* to)
 		*(void**) to = lua_touserdata(L, i);
 		return sizeof(void*);
 
+	case LUA_TNIL:
+		*(void**) to = NULL;
+		return sizeof(void*);
+
 	case LUA_TUSERDATA:
 		p = to_cdata(L, i, &ct);
 		lua_pop(L, 1);
@@ -434,17 +438,11 @@ static size_t unpack_vararg(lua_State* L, int i, char* to)
 			*(int64_t*) to = *(int64_t*) p;
 			return sizeof(int64_t);
 		}
-		goto err;
-
-	case LUA_TNIL:
-		*(void**) to = NULL;
-		return sizeof(void*);
-
+		break;
 	default:
-		goto err;
+		break;
 	}
 
-err:
 	return type_error(L, i, "vararg", 0, NULL);
 }
 
