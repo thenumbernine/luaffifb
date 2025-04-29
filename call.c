@@ -98,11 +98,16 @@ static int luaffi_libffi_call(
 	lua_State *L
 ) {						// stack: closure_func, args...
 printf("luaffi_libffi_call BEGIN, top=%d\n", lua_gettop(L));
-	// cdata of function is upvalue 1
+	// CData userdata of the function is in upvalue[1]
+	// Does anyone ever use this, both here and in call_*.h ?
+	// In both our cases a lua_CFunction is returned
+	// Looks like call_*.h for compile_function_callback() cdata is actually returned.
+	// Maybe I can switch call_*.h compile_function() to do the same in order to get the casting C function<->cdata bug fixed?
 
+	// function CType userdata uservalue[1]
 	int ct_usr = lua_upvalueindex(2);
 
-	// get closure arg #1 as the ffi_cif
+	// get closure arg #3 as the CalInfo that holds the ffi_cif
 	CallInfo * callInfo = (CallInfo*)lua_touserdata(L, lua_upvalueindex(3));
 
 	// translate all the Lua args into FFI args
@@ -246,9 +251,12 @@ printf("...pointer %p\n", ret.ptr);
 			case FUNCTION_PTR_TYPE:
 				luaL_error(L, "TODO FUNCTION_PTR_TYPE %s:%d", __FILE__, __LINE__);
 				break;
+			
+			case BOOL_TYPE:
+				lua_pushboolean(L, ret.uint);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return boolean
+				break;
 
 			case ENUM_TYPE:
-			case BOOL_TYPE:
 			case INT8_TYPE:
 			case INT16_TYPE:
 			case INT32_TYPE:

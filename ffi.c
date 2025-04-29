@@ -718,7 +718,7 @@ static int get_cfunction_address(
 	int idx,
 	CFunction* addr
 ) {						// stack: ...
-printf("beg top: %d\n", lua_gettop(L));
+//printf("get_cfunction_address BEGIN top=%d\n", lua_gettop(L));
 	if (!lua_isfunction(L, idx)) return 0;
 
 	// set n to the next free upvalue index
@@ -748,7 +748,7 @@ printf("beg top: %d\n", lua_gettop(L));
 	CFunction * f = (CFunction *)lua_touserdata(L, -3);	// stack: ..., up, mt, registry[&callback_mt_key]
 	*addr = f[1];
 	lua_pop(L, 3);						// stack: ...
-printf("end top: %d\n", lua_gettop(L));
+//printf("get_cfunction_address END top=%d\n", lua_gettop(L));
 	return 1;
 }
 
