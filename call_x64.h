@@ -807,7 +807,7 @@ void compile_function(
 	const CType* ct
 ) {									// stack: ...
 	int top = lua_gettop(L);
-	
+
 	JIT* Dst = get_jit(L);
 	int* perr = &Dst->last_errno;
 
@@ -1217,38 +1217,21 @@ void compile_function(
 
 	assert(lua_gettop(L) == top + num_upvals);
 
-	/* 
+	/*
 	next:
-	... compile() is called, 
-	... a CFunction `f` is returned, 
-	... that and the original CFunction `func` are both set in a userdata CFunction[2] 
+	... compile() is called,
+	... a CFunction `f` is returned,
+	... that and the original CFunction `func` are both set in a userdata CFunction[2]
 	... and that userdata is put in the upvalue of the C closure ... of f ... onto the stack ...
 	wait, why does f have f in its own upvalue?
-	
-	Ok the resulting lua_CFunction pushed on the stack is called "closure" in `cdata_call`,
-	And this is the function that is ultimately swapped in for the function and called with whatever args are passed to `cdata_call`.
-	Now `cdata_call` expects this lua_CFunction to be assigned to the CData-function's uservalue1-table whose key is the CData-function itself.
-	I know, kind of stupid, right?  Needless complexity for the purpose of needless abstraction.
-	
-	... if it's not assigned then that means cmodule_index() is calling compile_function() and not saving it, and the second cdata_call() is calling compile_function() a second time and actually doing the saving.
-	
-	That should be in the first upvalue, which is the CData-userdata with upvalue1 of stack[ct_usr].
-	That means stack[ct_usr] should be a table whose key of the CData-userdata is assigned to this same function object...
-	... and welp the CData-userdata is made in this function, and this function doesn't assign stack[ct_usr][p = CData-userdata], so stack[ct_usr] probably isn't saving the closure lua_CFunction...
-	... and that probably implies that compile_function() is called twice, once in cmodule_index() and once in cdata_call()
-	... Nope, I'm wrong, it is compiled just once.
-	So where does stack[ct_usr] save [p] = the lua_CFunction closure that's returned?
 
-	What an ugly mess.
-	
-	WAIT NO I WAS WRONG, cmodule_index AND cdata_call ARE TWO FULLY SEPARATE SCHEMES OF UPVALUES...
-	WHAT A GIANT PIECE OF SHIT CODEBASE THIS IS, AND WHO EVER THOUGHT OF MAKING IT IN SUCH A MESSY PIECE OF SHIT WAY?
+	Ok in cmodule_index this is the function that is then swapped in for module[key] and called with whatever args are passed to `cdata_call`.
 	*/
 
 	{
 		CFunction f = compile(Dst, L, func, LUA_NOREF);
 		// add a callback as an upval so that the jitted code gets cleaned up when the function gets gc'd
 		push_callback(L, f, func);
-		lua_pushcclosure(L, (lua_CFunction) f, num_upvals + 1);
+		lua_pushcclosure(L, (lua_CFunction)f, num_upvals + 1);
 	}
 }

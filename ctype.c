@@ -154,7 +154,7 @@ size_t ctype_size(lua_State* L, const CType* ct) {
 Creates a new `CData` userdata & leaves it on the stack,
 Sets its metatable to registry[cdata_mt_key]
 If `ct_usr` is nonzero then assigns it's 0th uservalue to `stack[ct_usr]`
-... what is the uservalue of cdata userdata supposed to be?
+... what is the uservalue of cdata userdata supposed to be?  How come I get the feeling it varies depending on the type ...
 Returns the pointer past the cdata to hold the cdata's contents.
 */
 void * push_cdata(

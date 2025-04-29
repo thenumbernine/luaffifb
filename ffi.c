@@ -15,7 +15,7 @@
 #include <math.h>
 #include <inttypes.h>
 
-// Set to 1 to get extra debugging on print 
+// Set to 1 to get extra debugging on print
 #define DEBUG_TOSTRING 0
 
 int jit_key;
@@ -302,32 +302,41 @@ static int get_cfunction_address(lua_State* L, int idx, CFunction* addr);
 	    type_error(L, idx, #TYPE, 0, NULL);                                 \
 	}                                                                       \
 
-static int64_t cast_int64(lua_State* L, int idx, int is_cast)
-{ TO_NUMBER(int64_t, is_cast, lua_tointeger); return ret; }
+static int64_t cast_int64(lua_State* L, int idx, int is_cast) {
+	TO_NUMBER(int64_t, is_cast, lua_tointeger); return ret;
+}
 
-static uint64_t cast_uint64(lua_State* L, int idx, int is_cast)
-{ TO_NUMBER(uint64_t, is_cast, lua_tointeger); return ret; }
+static uint64_t cast_uint64(lua_State* L, int idx, int is_cast) {
+	TO_NUMBER(uint64_t, is_cast, lua_tointeger); return ret;
+}
 
-int32_t check_int32(lua_State* L, int idx)
-{ return (int32_t) cast_int64(L, idx, 0); }
+int32_t check_int32(lua_State* L, int idx) {
+	return (int32_t) cast_int64(L, idx, 0);
+}
 
-uint32_t check_uint32(lua_State* L, int idx)
-{ return (uint32_t) cast_uint64(L, idx, 0); }
+uint32_t check_uint32(lua_State* L, int idx) {
+	return (uint32_t) cast_uint64(L, idx, 0);
+}
 
-int64_t check_int64(lua_State* L, int idx)
-{ return cast_int64(L, idx, 0); }
+int64_t check_int64(lua_State* L, int idx) {
+	return cast_int64(L, idx, 0);
+}
 
-uint64_t check_uint64(lua_State* L, int idx)
-{ return cast_uint64(L, idx, 0); }
+uint64_t check_uint64(lua_State* L, int idx) {
+	return cast_uint64(L, idx, 0);
+}
 
-double check_double(lua_State* L, int idx)
-{ TO_NUMBER(double, 0, lua_tonumber); return ret; }
+double check_double(lua_State* L, int idx) {
+	TO_NUMBER(double, 0, lua_tonumber); return ret;
+}
 
-float check_float(lua_State* L, int idx)
-{ TO_NUMBER(double, 0, lua_tonumber); return ret; }
+float check_float(lua_State* L, int idx) {
+	TO_NUMBER(double, 0, lua_tonumber); return ret;
+}
 
-uintptr_t check_uintptr(lua_State* L, int idx)
-{ TO_NUMBER(uintptr_t, 1, lua_tointeger); return ret; }
+uintptr_t check_uintptr(lua_State* L, int idx) {
+	TO_NUMBER(uintptr_t, 1, lua_tointeger); return ret;
+}
 
 complex_double check_complex_double(lua_State* L, int idx)
 {
@@ -829,8 +838,9 @@ err:
 
 /* to_type_cfunction converts a value at idx with uv at to_usr and type tt to
  * a CFunction. Leaves the stack unchanged. */
-CFunction check_typed_cfunction(lua_State* L, int idx, int to_usr, const CType* tt)
-{ return check_cfunction(L, idx, to_usr, tt, 1); }
+CFunction check_typed_cfunction(lua_State* L, int idx, int to_usr, const CType* tt) {
+	return check_cfunction(L, idx, to_usr, tt, 1);
+}
 
 static void set_value(lua_State* L, int idx, void* to, int to_usr, const CType* tt, int check_pointers);
 
@@ -1190,7 +1200,7 @@ static void setmintop(lua_State* L, int idx)
 	}
 }
 
-// warning: in the case that it finds an array size, it removes that index 
+// warning: in the case that it finds an array size, it removes that index
 static void get_variable_array_size(lua_State* L, int idx, CType* ct)
 {
 	/* we only care about the variable buisness for the variable array
@@ -1251,55 +1261,58 @@ Incoming stack is ctype (or string) and args
 static int do_new(
 	lua_State * L,
 	int is_cast
-) {								// stack: typedesc, args...
+) {													// stack: typedesc, args...
 	int check_ptrs = !is_cast;
 
 	CType ct;
-	check_ctype(L, 1, &ct);		// stack: typedesc, args..., typedesc's ctype's uservalue 1
+	check_ctype(L, 1, &ct);							// stack: typedesc, args..., typedesc's CType's uservalue 1
 
 	// don't push a callback when we have a c function, as cb:set needs a
 	// compiled callback from a lua function to work
-	if (!ct.pointers && 
-		ct.type == FUNCTION_PTR_TYPE && 
+	if (!ct.pointers &&
+		ct.type == FUNCTION_PTR_TYPE &&
 		(lua_isnil(L, 2) || lua_isfunction(L, 2))
 	) {
 		// Get the bound C function if this is a ffi lua function
 		CFunction func;
-		if (get_cfunction_address(L, 2, &func)) {
-			void * p = push_cdata(L, -1, &ct);
+		if (get_cfunction_address(L, 2, &func)) {	// stack: typedesc, args..., typedesc's CType's uservalue 1
+			void * p = push_cdata(L, -1, &ct);		// stack: typedesc, args..., typedesc's CType's uservalue 1, userdata of CData of CType ct
 			*(CFunction *)p = func;
 			return 1;
 		}
 
-		// Function cdatas are pinned and must be manually cleaned up by
-		// calling func:free()
+		// Function cdatas are pinned and must be manually cleaned up by calling func:free()
 		compile_callback(L, 2, -1, &ct);
 		pushRegistry(L, &callbacks_key);
 		lua_pushvalue(L, -2);
 		lua_pushboolean(L, 1);
 		lua_rawset(L, -3);
-		lua_pop(L, 1); /* callbacks tbl */
+		lua_pop(L, 1); // callbacks tbl
 		return 1;
 	}
 
-	/* this removes the vararg argument if its needed, and errors if its invalid */
+	// stack: typedesc, args..., typedesc's CType's uservalue 1
+
+	// this removes the vararg argument if its needed, and errors if its invalid
 	if (!is_cast) {
 		get_variable_array_size(L, 2, &ct);
 	}
 
-	void * p = push_cdata(L, -1, &ct);
+	// stack: typedesc, args..., typedesc's CType's uservalue 1
 
-	/* if the user mt has a __gc function then call ffi.gc on this value */
+	void * p = push_cdata(L, -1, &ct);		// stack: typedesc, args..., typedesc's CType's uservalue 1, CData userdata with uservalue 1 set to ct CType's userdata's uservalue 1
+
+	// if the user mt has a __gc function then call ffi.gc on this value
 	if (push_user_mt(L, -2, &ct)) {
 		pushRegistry(L, &gc_key);
 		lua_pushvalue(L, -3);
 
-		/* user_mt.__gc */
+		// user_mt.__gc
 		lua_pushliteral(L, "__gc");
 		lua_rawget(L, -4);
 
-		lua_rawset(L, -3); /* gc_upval[cdata] = user_mt.__gc */
-		lua_pop(L, 2); /* user_mt and gc_upval */
+		lua_rawset(L, -3); // gc_upval[cdata] = user_mt.__gc
+		lua_pop(L, 2); // user_mt and gc_upval
 	}
 
 	/* stack is:
@@ -1553,7 +1566,7 @@ static int cdata_call(
 
 		if (!lua_isnil(L, -1)) {
 			lua_insert(L, 1);
-			lua_pop(L, 2); // ct_usr, user_mt 
+			lua_pop(L, 2); // ct_usr, user_mt
 			lua_call(L, lua_gettop(L) - 1, LUA_MULTRET);
 			return lua_gettop(L);
 		}
@@ -1565,12 +1578,12 @@ static int cdata_call(
 
 	lua_pushvalue(L, 1);					// stack: f, ..., f_uv, f
 	lua_rawget(L, lua_upvalueindex(1));		// stack: f, ..., f_uv, closure = f_uv[f]
-	// Why use rawget(upvalueindex(1)) when the upvalueindex(1) is already on the stack from check_cdata ? 
-	// Does this mean a CData of a module C function has uservalue 1 = a table which, 
+	// Why use rawget(upvalueindex(1)) when the upvalueindex(1) is already on the stack from check_cdata ?
+	// Does this mean a CData of a module C function has uservalue 1 = a table which,
 	//  for key of that CData userdata, the value is the lua_CFunction to call?
 
 	// If the "closure" lua_CFunction associated with this CData-function is not present then generate it with compile_function()
-	
+
 	// WAIT NO I WAS WRONG, cmodule_index AND cdata_call ARE TWO FULLY SEPARATE SCHEMES OF UPVALUES...
 	// WHAT A GIANT PIECE OF SHIT CODEBASE THIS IS, AND WHO EVER THOUGHT OF MAKING IT IN SUCH A MESSY PIECE OF SHIT WAY?
 	if (!lua_isfunction(L, -1)) {
@@ -1579,7 +1592,7 @@ static int cdata_call(
 
 		assert(lua_gettop(L) == top + 2); 	// stack: f, ..., f_uv, closure
 
-		// closures[func] = closure 
+		// closures[func] = closure
 		lua_pushvalue(L, 1);				// stack: f, ..., f_uv, closure, f
 		lua_pushvalue(L, -2);				// stack: f, ..., f_uv, closure, f, closure
 		lua_rawset(L, lua_upvalueindex(1));	// stack: f, ..., f_uv, closure;  f_uv[f] = closure
@@ -1610,14 +1623,14 @@ static int ffi_metatype(lua_State* L)
 
 	lua_pushlightuserdata(L, &user_mt_key);
 	lua_pushvalue(L, 2);
-	lua_rawset(L, 3); // user[user_mt_key] = mt 
+	lua_rawset(L, 3); // user[user_mt_key] = mt
 
-	// return the passed in ctype 
+	// return the passed in ctype
 	push_ctype(L, 3, &ct);
 	return 1;
 }
 
-/* 
+/*
 If the type has a user metatable then pushes it onto the stack and returns 1,
 Otherwise pushes nothing and returns 0.
 */
@@ -1632,7 +1645,7 @@ int push_user_mt(
 	) {
 		return 0;
 	}
-	
+
 	if (!lua_istable(L, ct_usr)) {
 		return 0;
 	}
@@ -2364,7 +2377,7 @@ static int cdata_sub(lua_State* L)
 	}
 }
 
-// TODO fix for unsigned 
+// TODO fix for unsigned
 #define NUMBER_ONLY_BINOP(OPSTR, DO_NORMAL, DO_COMPLEX)	                 \
 	CType lt, rt, ct;                                                \
 	void *lp, *rp;                                                          \
@@ -2956,8 +2969,8 @@ static void* find_symbol(lua_State* L, int modidx, const char* asmname)
 	return sym;
 }
 
-/* 
-pushes the user table 
+/*
+pushes the user table
 */
 static void * lookup_global(
 	lua_State * L,
@@ -2973,7 +2986,7 @@ static void * lookup_global(
 
 	*pname = luaL_checkstring(L, nameidx);
 
-	// get the ctype 
+	// get the ctype
 	pushRegistry(L, &functions_key);		// stack: ..., registry[&functions_key]
 	lua_pushvalue(L, nameidx);				// stack: ..., registry[&functions_key], name = stack[nameidx]
 	lua_rawget(L, -2);						// stack: ..., registry[&functions_key], ct = registry[&functions_key][name]
@@ -2982,7 +2995,7 @@ static void * lookup_global(
 		return NULL;
 	}
 
-	// leave just the ct_usr on the stack 
+	// leave just the ct_usr on the stack
 	*ct = *(const CType*)lua_touserdata(L, -1);
 	lua_getuservalue(L, -1);			// stack: ..., registry[&functions_key], ct, uv = ct uservalue 1
 	lua_replace(L, top + 1);			// stack: ..., uv, ct
@@ -2990,7 +3003,7 @@ static void * lookup_global(
 
 	assert(lua_gettop(L) == top + 1);
 
-	// get the assembly name 
+	// get the assembly name
 	pushRegistry(L, &asmname_key);		// stack: ..., uv, registry[&asmname_key]
 	lua_pushvalue(L, nameidx);			// stack: ..., uv, registry[&asmname_key], name
 	lua_rawget(L, -2);					// stack: ..., uv, registry[&asmname_key], registry[&asmname_key][name]
@@ -3016,10 +3029,10 @@ static int cmodule_index(
 ) {							// stack: module, key, ... but the ... is empty if it is invoked via metamethod
 	lua_settop(L, 2);
 
-	// see if we have already loaded the function 
-	lua_getuservalue(L, 1);	// stack: module, key, ..., uv = module uservalue 1
-	lua_pushvalue(L, 2);	// stack: module, key, ..., uv, key
-	lua_rawget(L, -2);		// stack: module, key, ..., uv, uv[key]
+	// see if we have already saved the function from our last time around in the compile_function() block down below
+	lua_getuservalue(L, 1);	// stack: module, key, ..., module_uv = module uservalue 1
+	lua_pushvalue(L, 2);	// stack: module, key, ..., module_uv, key
+	lua_rawget(L, -2);		// stack: module, key, ..., module_uv, module_uv[key]
 	if (!lua_isnil(L, -1)) {
 		// ... so module[key]'s function cdata is stored in module uservalue 1 [key] ?
 		// why not just in ... module[key] ?
@@ -3027,7 +3040,7 @@ static int cmodule_index(
 	}
 	lua_pop(L, 2);			// stack: module, key, ...
 
-	// check the constants table 
+	// check the constants table
 	pushRegistry(L, &constants_key);	// stack: module, key, ..., registry[&constants_key]
 	lua_pushvalue(L, 2);				// stack: module, key, ..., registry[&constants_key], key
 	lua_rawget(L, -2);					// stack: module, key, ..., registry[&constants_key][key]
@@ -3036,7 +3049,7 @@ static int cmodule_index(
 	}
 	lua_pop(L, 2);						// stack: module, key, ...
 
-	// lookup_global pushes the ct_usr 
+	// lookup_global pushes the ct_usr
 	const char* asmname;
 	CType ct;
 	void * sym = lookup_global(L, 1, 2, &asmname, &ct);		// stack: module, key, ..., ct_usr = global[name]'s ctype's uservalue 1 ...
@@ -3077,15 +3090,15 @@ static int cmodule_index(
 		return 1;
 	}
 
-	// extern const char* foo; and extern const char foo[]; 
+	// extern const char* foo; and extern const char foo[];
 	if (ct.pointers == 1 && ct.type == INT8_TYPE) {
-		lua_pushstring(L, !ct.is_array 
+		lua_pushstring(L, !ct.is_array
 			? *(char**) sym
 			: (char *)sym);
 		return 1;
 	}
 
-	// extern struct foo foo[], extern void* foo[]; and extern struct foo foo; 
+	// extern struct foo foo[], extern void* foo[]; and extern struct foo foo;
 	if (ct.is_array
 		|| (!ct.pointers
 			&& (ct.type == UNION_TYPE || ct.type == STRUCT_TYPE)
@@ -3097,7 +3110,7 @@ static int cmodule_index(
 		return 1;
 	}
 
-	// extern void* foo; and extern void (*foo)(); 
+	// extern void* foo; and extern void (*foo)();
 	if (ct.pointers || ct.type == FUNCTION_PTR_TYPE) {
 		void* p = push_cdata(L, -1, &ct);
 		*(void**) p = *(void**) sym;
@@ -3110,7 +3123,7 @@ static int cmodule_index(
 	case INTPTR_TYPE:
 	case INT64_TYPE:
 		{
-			// TODO: complex float/double need to be references if .re and .imag are setable 
+			// TODO: complex float/double need to be references if .re and .imag are setable
 			void* p = push_cdata(L, -1, &ct);
 			memcpy(p, sym, ct.base_size);
 			return 1;
@@ -3242,11 +3255,13 @@ static int do64(lua_State* L, int is_unsigned)
 	return 1;
 }
 
-static int ffi_i64(lua_State* L)
-{ return do64(L, 0); }
+static int ffi_i64(lua_State* L) {
+	return do64(L, 0);
+}
 
-static int ffi_u64(lua_State* L)
-{ return do64(L, 1); }
+static int ffi_u64(lua_State* L) {
+	return do64(L, 1);
+}
 
 static const luaL_Reg cdata_mt[] = {
 	{"__gc", cdata_gc},

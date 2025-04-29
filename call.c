@@ -75,7 +75,7 @@ static inline ffi_type * getFFITypeForCType(
 	case INT32_TYPE: return mbr_ct->is_unsigned ? &ffi_type_uint32 : &ffi_type_sint32;
 	case FLOAT_TYPE: return &ffi_type_float;
 	case DOUBLE_TYPE: return &ffi_type_double;
-	default: 
+	default:
 		luaL_error(L, "NYI: call return type");
 		return NULL;
 	}
@@ -87,18 +87,23 @@ upvalues:
 #1: whatever ct_usr is (the first upvalue of cdata_call?)
 #2: CallInfo userdata
 */
-static int call_ffi(lua_State *L) {
-	int ct_usr = lua_upvalueindex(1);
+static int call_ffi(
+	lua_State *L
+) {						// stack: closure_func, args...
+printf("call_ffi\n");
+	// cdata of function is upvalue 1
+
+	int ct_usr = lua_upvalueindex(2);
 
 	// get closure arg #1 as the ffi_cif
-	CallInfo * callInfo = (CallInfo*)lua_touserdata(L, lua_upvalueindex(2));
+	CallInfo * callInfo = (CallInfo*)lua_touserdata(L, lua_upvalueindex(3));
 
 	// translate all the Lua args into FFI args
 	for (int i = 1; i <= callInfo->nargs; ++i) {
-		lua_rawgeti(L, ct_usr, i);
+		lua_rawgeti(L, ct_usr, i);		// stack: closure_func, args..., arg[i]'s CType's userdata = closure_func's upvalue[2]'s [i]
 		const CType * mbr_ct = (const CType*) lua_touserdata(L, -1);
-
-		if (mbr_ct->pointers || mbr_ct->is_reference || mbr_ct->type == INTPTR_TYPE) {
+		lua_pop(L, 1);			// stack: closure_func, args...
+		if (mbr_ct->pointers || mbr_ct->is_reference) {
 			callInfo->valueData[i-1].i = check_int64(L, i);
 		} else {
 			switch (mbr_ct->type) {
@@ -121,6 +126,7 @@ static int call_ffi(lua_State *L) {
 			case INT16_TYPE:
 			case INT32_TYPE:
 			case INT64_TYPE:
+			case INTPTR_TYPE:
 				if (mbr_ct->is_unsigned) {
 					callInfo->valueData[i-1].i = check_uint64(L, i);
 				} else {
@@ -134,20 +140,104 @@ static int call_ffi(lua_State *L) {
 				callInfo->valueData[i-1].d = check_double(L, i);
 				break;
 			default:
-				luaL_error(L, "NYI: call return type");
+				luaL_error(L, "NYI: call type");
 			}
 		}
-
-		lua_pop(L, 1);
 	}
 
+	//what about when sizeof(int64) > sizeof(intptr),
+	//or what about when sizeof(double) > sizeof(intptr) ?
+	//do they require return pointer to point to allocated space?
+	// I bet I need to allocate this up front, but only for certain types ... that are larger than intptr ...
+printf("calling func=%p\n", callInfo->func);
 	// do the call
 	void *ret = {};
+
 	ffi_call(&callInfo->cif, callInfo->func, &ret, callInfo->valuePtrs);
 
 	// TODO translate the Lua result to C result
+	{
+		lua_rawgeti(L, ct_usr, 0);		// stack: closure_func, args..., return type's CType's userdata = closure_func's upvalue[2]'s [0]
+		const CType * mbr_ct = (const CType *)lua_touserdata(L, -1);
 
-	return 0;
+		// So when creating CData, I'm supposed to get the CType's uservalue1 and forward that on to the CData's uservalue1, right?
+		// I think I see that going on in `do_new` ...
+		lua_getuservalue(L, -1);		// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1]
+
+printf("...ret type %d value %p\n", mbr_ct->type, ret);
+		if (mbr_ct->pointers || mbr_ct->is_reference) {
+			// the function returned a pointer ...
+			// now we wrap it in CData
+
+			// TODO WHAT ARE THE MAGIC USERVALUES THAT GO WITH THE CDATA?!?!?!?!? THEY AREN'T DOCUMENTED ANYWHERE I LOOK AND THEY ARE ARBITRARY DEPENDING ON THE UNDERLYING CDATA / CTYPE !!!!!
+			void ** ptr = (void **)push_cdata(L, -1, mbr_ct);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
+			ptr[0] = ret;
+
+		} else {
+			switch (mbr_ct->type) {
+			case FUNCTION_PTR_TYPE:
+				luaL_error(L, "TODO %s:%d", __FILE__, __LINE__);
+				break;
+			case ENUM_TYPE:
+				luaL_error(L, "TODO %s:%d", __FILE__, __LINE__);
+				break;
+
+			case BOOL_TYPE:
+			case INT8_TYPE:
+			case INT16_TYPE:
+			case INT32_TYPE:
+			case INT64_TYPE:
+				// uhm, does it always allocate 8 bytes?
+				if (mbr_ct->is_unsigned) {
+					uint64_t * ptr = (uint64_t *)push_cdata(L, -1, mbr_ct);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
+					ptr[0] = *(uint64_t*)&ret;
+				} else {
+					int64_t * ptr = (int64_t *)push_cdata(L, -1, mbr_ct);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
+					ptr[0] = *(int64_t*)&ret;
+				}
+				break;
+
+			case INTPTR_TYPE:
+				if (mbr_ct->is_unsigned) {
+					uintptr_t * ptr = (uintptr_t *)push_cdata(L, -1, mbr_ct);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
+					ptr[0] = *(uintptr_t*)&ret;
+				} else {
+					intptr_t * ptr = (intptr_t *)push_cdata(L, -1, mbr_ct);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
+					ptr[0] = *(intptr_t*)&ret;
+				}
+				break;
+			case FLOAT_TYPE:
+				{
+					float * ptr = (float *)push_cdata(L, -1, mbr_ct);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
+					ptr[0] = *(float*)&ret;
+				}
+				break;
+			case DOUBLE_TYPE:
+				{
+					double * ptr = (double *)push_cdata(L, -1, mbr_ct);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
+					ptr[0] = *(double*)&ret;
+				}
+				break;
+			case COMPLEX_FLOAT_TYPE:
+				{
+					complex_float * ptr = (complex_float *)push_cdata(L, -1, mbr_ct);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
+					// TODO pointer-to-result, this will overflow and write oob
+					ptr[0] = *(complex_float*)&ret;
+				}
+				break;
+			case COMPLEX_DOUBLE_TYPE:
+				{
+					complex_double * ptr = (complex_double *)push_cdata(L, -1, mbr_ct);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
+					ptr[0] = *(complex_double*)&ret;
+				}
+				break;
+			default:
+				luaL_error(L, "NYI: call return type");
+			}
+		}
+	}
+
+	return 1;
 }
 
 CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct) {
@@ -161,11 +251,11 @@ ct_usr = index of the function's ctype's uservalue 1
 void compile_function(
 	lua_State * L,
 	CFunction func,
-	int ct_usr,					// CType uservalue ... what are these used for again?  "usr" for the uservalue doesn't lend much of an explanation ...
+	int ct_usr,					// userdata of CType's uservalue 1 ... what are these used for again?  "usr" for the uservalue doesn't lend much of an explanation ...
 	const CType * ct
 ) {								// stack: ...
-printf("compile_function begin top=%d\n", lua_gettop(L));	
-	int top = lua_gettop(L);
+printf("compile_function func=%p\n", func);
+	//int top = lua_gettop(L);
 	ct_usr = lua_absindex(L, ct_usr);
 
 	if (ct->calling_convention != C_CALL && ct->has_var_arg) {
@@ -183,7 +273,7 @@ printf("compile_function begin top=%d\n", lua_gettop(L));
 		luaL_error(L, "function call has too many args: %d > %d\n", nargs, maxArgs);
 	}
 
-	/* 
+	/*
 	Does this mean a function's CType userdata's uservalue 1 is a table of:
 	[0] = userdata<CType *> of the return type
 	[i] = userdata<CType *> of the i'th arg type, for i>0
@@ -192,16 +282,20 @@ printf("compile_function begin top=%d\n", lua_gettop(L));
 		lua_rawgeti(L, ct_usr, i);
 		CType const * mbr_ct = (CType const *)lua_touserdata(L, -1);
 		argFFITypes[i-1] = getFFITypeForCType(L, mbr_ct);
+printf("libffi args[%d] type = %d\n", i, argFFITypes[i-1]->type);
 		lua_pop(L, 1);
 	}
 
 	lua_rawgeti(L, ct_usr, 0);
 	CType const * mbr_ct = (CType const *)lua_touserdata(L, -1);
 	ffi_type * retFFIType = getFFITypeForCType(L, mbr_ct);
+printf("libffi return type %d\n", retFFIType->type);
 	lua_pop(L, 1);
 
+	lua_pushvalue(L, ct_usr);					// stack: ..., p, stack[ct_usr],
+
 	// push the ffi_cif
-	CallInfo * callInfo = (CallInfo*)lua_newuserdata(L, sizeof(CallInfo));	// stack: ..., p, CallInfo
+	CallInfo * callInfo = (CallInfo*)lua_newuserdata(L, sizeof(CallInfo));	// stack: ..., p, stack[ct_usr], CallInfo
 	callInfo->func = func;
 	callInfo->nargs = nargs;
 	callInfo->valueData = (Value*)malloc(sizeof(Value) * nargs);
@@ -215,15 +309,14 @@ printf("compile_function begin top=%d\n", lua_gettop(L));
 		luaL_error(L, "ffi_prep_cif failed with %d", prepResult);
 	}
 
-	/* 
+	/*
 	so when __call on the CData of a CFunction happens it had better match spec
 	so what is that spec?
-	cdata_call should show us ...
-	... userdata 1 is left from check_cdata
+	This is just a lua_CFunction stored in module[key]
+	So it just executes like any other function would
 	*/
 
-	lua_pushcclosure(L, (lua_CFunction)func, 2);	// stack: ..., func
-printf("compile_function end top=%d\n", lua_gettop(L));	
+	lua_pushcclosure(L, call_ffi, 3);	// stack: ..., call_ffi with closure of {p, stack[ct_usr], CallInfo}
 }
 
 // stub functions
@@ -306,7 +399,7 @@ static CFunction compile(JIT* jit, lua_State* L, CFunction func, int ref)
 	}
 
 	codesz += sizeof(JIT_head);
-	code = (JIT_head*) reserve_code(jit, L, codesz);
+	code = (JIT_head *)reserve_code(jit, L, codesz);
 	code->ref = ref;
 	code->size = codesz;
 	compile_extern_jump(jit, L, func, code->jump);
