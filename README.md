@@ -2,16 +2,18 @@ Me picking up the facebook-archive luaffifb project.  Of all the lua-ffi project
 
 # Changes I've made since forking it:
 
-- ctype objects as well as cdata objects can now use their metatables' `__index` - just like in vanilla LuaJIT.
-- arithmetic on pointers no longer calls into the metatmethod of the underlying ctype - just like in vanilla LuaJIT.
+- CType objects as well as CData objects can now use their metatables' `__index` - just like in vanilla LuaJIT.
+- Arithmetic on pointers no longer calls into the metatmethod of the underlying CType - just like in vanilla LuaJIT.
 - luaffifb's `tonumber` now handles float, double, complex float, complex double, as well as integer types; and it no longer converts pointers and arrays - just like in vanilla LuaJIT.
 - `ffi.null` as well as `ffi.NULL`
 
 # Changes still to make:
 
-- when targetting wasm, use libffi instead of dynasm for calling.  Ok at first I dismissed https://github.com/q66/cffi-lua and https://github.com/zhaojh329/lua-ffi for lacking key features that luaffifb had, but now I see the good side of using libffi over hacked in dynasm jit calls, and that is for wasm support.  so I haven't yet finished it but maybe I will look at these for inspiration.
-- why do I think `tonumber(ffi.new('int64_t', 0))` is serializing first and then parsing the string to a number?  Is there a better way to convert int64 boxed type to lua integer ...
-- indexing fields that aren't there should throw exceptions.  I hate it, but I'm staying true to LuaJIT.  or maybe I shouldn't, idk...
+- When targetting wasm, use libffi instead of dynasm for calling.  Ok at first I dismissed https://github.com/q66/cffi-lua and https://github.com/zhaojh329/lua-ffi for lacking key features that luaffifb had like bitflags, but now I see the good side of using libffi over hacked in dynasm jit calls, and that is for wasm support.  so I haven't yet finished it but maybe I will look at these for inspiration.
+- Why do I think `tonumber(ffi.new('int64_t', 0))` is serializing first and then parsing the string to a number?  Is there a better way to convert int64 boxed type to lua integer ...
+- Indexing fields that aren't there should throw exceptions.  I hate it, but I'm staying true to LuaJIT.  or maybe I shouldn't, idk...
+- CTypes can only be up to 3 pointers deep.  libjpeg breaks this.  Do like luajit and let the CType hold a pointer to the base-CType.  It's starting to look more and more like the pure-lua ffi implementation I made should just be converted over and it'll be more feature-rich than the CType/CData implementation here ... though this implementation seems to have the most superior parser.
+- In vanilla LuaJIT you can cast a C function to a void*, but because this wraps the C function in the closure of a lua_CFunction, this complains that you can't convert lua_CFunctions to CData.  FIX THIS by instead passing back CData from compile_function(), and changing `cdata_call` to handle the new case.
 
 <hr>
 

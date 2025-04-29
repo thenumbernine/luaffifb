@@ -1,5 +1,11 @@
 #include <stdint.h>
 
+int notification = 0;
+extern void test() { notification = 1; }
+
+extern void* test_vp() { return (void*)0xdeadbeef; }
+extern void* test_vp2() { return test_vp2; }
+
 // testing that return works
 extern uint8_t test_u8() { return 42; }
 extern int8_t test_s8() { return -42; }

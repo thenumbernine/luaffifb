@@ -119,17 +119,17 @@ printf("setting arg %d\n", i);
 		} else {
 			switch (mbr_ct->type) {
 			case FUNCTION_PTR_TYPE:
-printf("...FUNCTION_PTR_TYPE...\n");				
+printf("...FUNCTION_PTR_TYPE...\n");
 				argValue->ptr = (void*)check_uint64(L, i);
 printf("...%p\n", argValue->ptr);
 				break;
 			case ENUM_TYPE:
-printf("...ENUM_TYPE...\n");				
+printf("...ENUM_TYPE...\n");
 				argValue->sint = check_int32(L, i);
 printf("...%ld\n", argValue->sint);
 				break;
 			case BOOL_TYPE:
-printf("...BOOL_TYPE...\n");				
+printf("...BOOL_TYPE...\n");
 				argValue->sint = (check_int64(L, i) != 0);
 printf("...%ld\n", argValue->sint);
 				break;
@@ -137,72 +137,72 @@ printf("...%ld\n", argValue->sint);
 printf("...INT8_TYPE...\n");
 				if (mbr_ct->is_unsigned) {
 					argValue->uint = check_uint64(L, i);
-printf("...%lu\n", argValue->uint);		
+printf("...%lu\n", argValue->uint);
 				} else {
 					argValue->sint = check_int64(L, i);
-printf("...%ld\n", argValue->sint);		
+printf("...%ld\n", argValue->sint);
 				}
-				break;			
+				break;
 			case INT16_TYPE:
 printf("...INT16_TYPE...\n");
 				if (mbr_ct->is_unsigned) {
 					argValue->uint = check_uint64(L, i);
-printf("...%lu\n", argValue->uint);		
+printf("...%lu\n", argValue->uint);
 				} else {
 					argValue->sint = check_int64(L, i);
-printf("...%ld\n", argValue->sint);		
+printf("...%ld\n", argValue->sint);
 				}
-				break;			
+				break;
 			case INT32_TYPE:
 printf("...INT32_TYPE...\n");
 				if (mbr_ct->is_unsigned) {
 					argValue->uint = check_uint64(L, i);
-printf("...%lu\n", argValue->uint);		
+printf("...%lu\n", argValue->uint);
 				} else {
 					argValue->sint = check_int64(L, i);
-printf("...%ld\n", argValue->sint);		
+printf("...%ld\n", argValue->sint);
 				}
-				break;			
+				break;
 			case INT64_TYPE:
 printf("...INT64_TYPE...\n");
 				if (mbr_ct->is_unsigned) {
 					argValue->uint = check_uint64(L, i);
-printf("...%lu\n", argValue->uint);		
+printf("...%lu\n", argValue->uint);
 				} else {
 					argValue->sint = check_int64(L, i);
-printf("...%ld\n", argValue->sint);		
+printf("...%ld\n", argValue->sint);
 				}
 				break;
 			case INTPTR_TYPE:
 printf("...INTPTR_TYPE...\n");
 				if (mbr_ct->is_unsigned) {
 					argValue->uint = check_uint64(L, i);
-printf("...%lu\n", argValue->uint);		
+printf("...%lu\n", argValue->uint);
 				} else {
 					argValue->sint = check_int64(L, i);
-printf("...%ld\n", argValue->sint);		
+printf("...%ld\n", argValue->sint);
 				}
 				break;
 			case FLOAT_TYPE:
 printf("...FLOAT_TYPE...\n");
 				argValue->flt = check_double(L, i);
-printf("...%f\n", argValue->flt);		
+printf("...%f\n", argValue->flt);
 				break;
 			case DOUBLE_TYPE:
 printf("...DOUBLE_TYPE...\n");
 				argValue->dbl = check_double(L, i);
-printf("...%f\n", argValue->dbl);		
+printf("...%f\n", argValue->dbl);
 				break;
 			case COMPLEX_FLOAT_TYPE:	// TODO FIXME
-printf("...COMPLEX_FLOAT_TYPE...\n");				
+printf("...COMPLEX_FLOAT_TYPE...\n");
 				argValue->cflt = check_complex_float(L, i);
 printf("...%f %f\n", crealf(argValue->cflt), cimagf(argValue->cflt));
 				break;
 			case COMPLEX_DOUBLE_TYPE:	// TODO FIXME
-printf("...COMPLEX_DOUBLE_TYPE...\n");				
+printf("...COMPLEX_DOUBLE_TYPE...\n");
 				argValue->cdbl = check_complex_double(L, i);
 printf("...%f %f\n", creal(argValue->cdbl), cimag(argValue->cdbl));
-				break;		
+				break;
 			default:
 				luaL_error(L, "NYI: call type");
 			}
@@ -241,19 +241,21 @@ printf("...pointer %p\n", ret.ptr);
 
 		} else {
 			switch (mbr_ct->type) {
+			case VOID_TYPE:
+				return 0;
 			case FUNCTION_PTR_TYPE:
 				luaL_error(L, "TODO FUNCTION_PTR_TYPE %s:%d", __FILE__, __LINE__);
 				break;
-			
+
 			case ENUM_TYPE:
 			case BOOL_TYPE:
 			case INT8_TYPE:
 			case INT16_TYPE:
 			case INT32_TYPE:
 				if (mbr_ct->is_unsigned) {
-					lua_pushnumber(L, (lua_Number)ret.uint);
+					lua_pushnumber(L, (lua_Number)ret.uint);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return number
 				} else {
-					lua_pushnumber(L, (lua_Number)ret.sint);
+					lua_pushnumber(L, (lua_Number)ret.sint);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return number
 				}
 				break;
 
@@ -278,12 +280,12 @@ printf("...pointer %p\n", ret.ptr);
 					ptr[0] = ret.sint;
 				}
 				break;
-			
+
 			case FLOAT_TYPE:
-				lua_pushnumber(L, ret.flt);
+				lua_pushnumber(L, ret.flt);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return number
 				break;
 			case DOUBLE_TYPE:
-				lua_pushnumber(L, ret.dbl);
+				lua_pushnumber(L, ret.dbl);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return number
 				break;
 			case COMPLEX_FLOAT_TYPE:
 				{

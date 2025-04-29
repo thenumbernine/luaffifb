@@ -4,6 +4,13 @@ ffi = require 'ffi'
 local assert = require 'ext.assert'
 
 ffi.cdef[[
+
+int notification;
+void test();
+
+void* test_vp();
+void* test_vp2();
+
 uint8_t test_u8();
 int8_t test_s8();
 uint16_t test_u16();
@@ -39,6 +46,20 @@ double test_f64_f64_f64(double x, double y);
 ]]
 
 local lib = ffi.load'libsimple_test.so'
+
+-- how to test void() functions... state change
+assert.eq(lib.notification, 0)
+lib.test()
+assert.eq(lib.notification, 1)
+
+assert.eq(lib.test_vp(), ffi.new('void*', 0xdeadbeef))
+
+-- [[ TODO FIXME casting C functions to cdata<void*> gives "unable to convert argument 2 from lua<function> to cdata<pointer>" from ffi.c type_error()
+-- But in luajit it works
+-- Because in our current implementation we are converting the C function to a lua_CFunction that's being called
+-- To get this to work, we need to return CData of the C function and do this all in cdata_call ...
+assert.eq(lib.test_vp2(), ffi.cast('void*', lib.test_vp2))	-- TODO can't
+--]]
 
 -- testing return
 assert.eq(lib.test_u8(), 42)
