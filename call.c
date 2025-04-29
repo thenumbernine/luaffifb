@@ -403,6 +403,7 @@ DEBUGPRINT("compile_function() BEGIN func=%p\n", func);
 		luaL_error(L, "vararg is only allowed with the c calling convention");
 	}
 
+	// TODO who even uses this anyways?
 	void * p = push_cdata(L, funcCTypeUserValueLoc, ct);	// stack: ..., p = CData userdata for type ct
 	*(CFunction *)p = func;
 
