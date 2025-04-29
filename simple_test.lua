@@ -62,14 +62,16 @@ local lib = ffi.load'libsimple_test.so'
 
 for rep=1,5 do
 print('!!!!!!!! BEGINNING REPEAT '..rep..' !!!!!!!!')
---[=[	
 	-- how to test void() functions... state change
+	
+	lib.var = 0
 	assert.eq(lib.var, 0)
 	lib.test()
 	assert.eq(lib.var, 1)
-	lib.var = 0
 
+--[=[
 	assert.eq(lib.test_vp(), ffi.new('void*', 0xdeadbeef))
+--]=]
 
 	--[[ TODO FIXME casting C functions to cdata<void*> gives "unable to convert argument 2 from lua<function> to cdata<pointer>" from ffi.c type_error()
 	-- But in luajit it works
@@ -91,19 +93,15 @@ print('!!!!!!!! BEGINNING REPEAT '..rep..' !!!!!!!!')
 	assert.eq(lib.test_f64(), -123)	-- at what point does this become testing floating point parsing accuracy ...
 
 	-- testing return & single arguments
---]=]
-	lib.test_v_u8(42) assert.eq(lib.var, 42+1)
---[=[	
+	lib.test_v_u8(42) assert.eq(lib.var, 42+1)	
 	lib.test_v_s8(-42) assert.eq(lib.var, -42+1)
 	lib.test_v_u16(345) assert.eq(lib.var, 345+1)
 	lib.test_v_s16(-345) assert.eq(lib.var, -345+1)
 	lib.test_v_u32(67890) assert.eq(lib.var, 67890+1)
 	lib.test_v_s32(-67890) assert.eq(lib.var, -67890+1)
 	lib.test_v_u64(ffi.new('uint64_t', 0x123456789)) assert.eq(lib.var, 0x23456789+1)
-	lib.test_v_s64(ffi.new('int64_t', -0x123456789)) assert.eq(lib.var, -0x23456789+1)
---]=]	
+	lib.test_v_s64(ffi.new('int64_t', -0x123456789)) assert.eq(lib.var, -0x23456789+1)	
 	lib.test_v_f32(-123) assert.eq(lib.var, -123+1)	-- at what point does this become testing floating point parsing accuracy ...
---[=[
 	lib.test_v_f64(-123) assert.eq(lib.var, -123+1)	-- at what point does this become testing floating point parsing accuracy ...
 
 	
@@ -131,5 +129,4 @@ print('!!!!!!!! BEGINNING REPEAT '..rep..' !!!!!!!!')
 	assert.eq(lib.test_s64_s64_s64(ffi.new('int64_t', -0x123456789), ffi.new('int64_t', -0x123456789)), ffi.new('int64_t', (-0x123456789)+(-0x123456789)+1))
 	assert.eq(lib.test_f32_f32_f32(-123, -123), (-123)+(-123)+1)	-- at what point does this become testing floating point parsing accuracy ...
 	assert.eq(lib.test_f64_f64_f64(-123, -123), (-123)+(-123)+1)	-- at what point does this become testing floating point parsing accuracy ...
---]=]
 end
