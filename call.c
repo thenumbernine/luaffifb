@@ -146,10 +146,10 @@ printf("...callInfo %p\n", callInfo);
 	for (int i = 1; i <= callInfo->nargs; ++i) {
 		lua_rawgeti(L, ct_usr, i);		// stack: closure_func, args..., arg[i]'s CType's userdata = closure_func's upvalue[2]'s [i]
 		const CType * argCType = (const CType*) lua_touserdata(L, -1);
-		
+
 		CallValue * argValue = &callInfo->valueData[i-1];
 		assert(callInfo->valuePtrs[i-1] == argValue);
-		
+
 		lua_getuservalue(L, -1);
 		push_type_name(L, -1, argCType);
 printf("...setting arg #%d @%p of luaffi-type=%s libffi-type-ptr=%p\n", i, argValue, lua_tostring(L, -1), callInfo->cif.arg_types[i-1]);
@@ -288,85 +288,82 @@ for (int i = 0; i < callInfo->nargs; ++i) {
 printf("...ret luaffi-type=%d name=%s libffi-type-ptr=%p\n", retCType->type, lua_tostring(L, -1), callInfo->cif.rtype);
 		lua_pop(L, 1);
 
-		if (retCType->type == VOID_TYPE) {
+		if (retCType->pointers || retCType->is_reference) {
+			// the function returned a pointer ...
+			// now we wrap it in CData
+
+			// TODO WHAT ARE THE MAGIC USERVALUES THAT GO WITH THE CDATA?!?!?!?!? THEY AREN'T DOCUMENTED ANYWHERE I LOOK AND THEY ARE ARBITRARY DEPENDING ON THE UNDERLYING CDATA / CTYPE !!!!!
+			void ** ptr = (void **)push_cdata(L, -1, retCType);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
+printf("...pointer %p\n", ret.ptr);
+			ptr[0] = ret.ptr;
+
+		} else if (retCType->type == VOID_TYPE) {
 			nresult = 0;
 		} else {
+			switch (retCType->type) {
 
-			if (retCType->pointers || retCType->is_reference) {
-				// the function returned a pointer ...
-				// now we wrap it in CData
+			case FUNCTION_PTR_TYPE:
+				luaL_error(L, "TODO FUNCTION_PTR_TYPE %s:%d", __FILE__, __LINE__);
+				break;
 
-				// TODO WHAT ARE THE MAGIC USERVALUES THAT GO WITH THE CDATA?!?!?!?!? THEY AREN'T DOCUMENTED ANYWHERE I LOOK AND THEY ARE ARBITRARY DEPENDING ON THE UNDERLYING CDATA / CTYPE !!!!!
-				void ** ptr = (void **)push_cdata(L, -1, retCType);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
-printf("...pointer %p\n", ret.ptr);
-				ptr[0] = ret.ptr;
+			case BOOL_TYPE:
+				lua_pushboolean(L, ret.uintptrValue);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return boolean
+				break;
 
-			} else {
-				switch (retCType->type) {
-
-				case FUNCTION_PTR_TYPE:
-					luaL_error(L, "TODO FUNCTION_PTR_TYPE %s:%d", __FILE__, __LINE__);
-					break;
-				
-				case BOOL_TYPE:
-					lua_pushboolean(L, ret.uintptrValue);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return boolean
-					break;
-
-				case ENUM_TYPE:
-				case INT8_TYPE:
-				case INT16_TYPE:
-				case INT32_TYPE:
-					if (retCType->is_unsigned) {
-						lua_pushnumber(L, (lua_Number)ret.uintptrValue);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return number
-					} else {
-						lua_pushnumber(L, (lua_Number)ret.intptrValue);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return number
-					}
-					break;
-
-				case INT64_TYPE:
-					// uhm, does it always allocate 8 bytes?
-					if (retCType->is_unsigned) {
-						uint64_t * ptr = (uint64_t *)push_cdata(L, -1, retCType);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
-						ptr[0] = ret.uintptrValue;
-					} else {
-						int64_t * ptr = (int64_t *)push_cdata(L, -1, retCType);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
-						ptr[0] = ret.intptrValue;
-					}
-					break;
-
-				// TODO test intptr_t size, and use boxed type vs lua number type?
-				case INTPTR_TYPE:
-					if (retCType->is_unsigned) {
-						uintptr_t * ptr = (uintptr_t *)push_cdata(L, -1, retCType);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
-						ptr[0] = ret.uintptrValue;
-					} else {
-						intptr_t * ptr = (intptr_t *)push_cdata(L, -1, retCType);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
-						ptr[0] = ret.intptrValue;
-					}
-					break;
-
-				case FLOAT_TYPE:
-					lua_pushnumber(L, ret.floatValue);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return number
-					break;
-				case DOUBLE_TYPE:
-					lua_pushnumber(L, ret.doubleValue);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return number
-					break;
-				case COMPLEX_FLOAT_TYPE:
-					{
-						complex_float * ptr = (complex_float *)push_cdata(L, -1, retCType);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
-						// TODO pointer-to-result, this will overflow and write oob
-						ptr[0] = ret.complex_floatValue;
-					}
-					break;
-				case COMPLEX_DOUBLE_TYPE:
-					{
-						complex_double * ptr = (complex_double *)push_cdata(L, -1, retCType);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
-						ptr[0] = ret.complex_doubleValue;
-					}
-					break;
-				default:
-					luaL_error(L, "NYI: call return type");
+			case ENUM_TYPE:
+			case INT8_TYPE:
+			case INT16_TYPE:
+			case INT32_TYPE:
+				if (retCType->is_unsigned) {
+					lua_pushnumber(L, (lua_Number)ret.uintptrValue);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return number
+				} else {
+					lua_pushnumber(L, (lua_Number)ret.intptrValue);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return number
 				}
+				break;
+
+			case INT64_TYPE:
+				// uhm, does it always allocate 8 bytes?
+				if (retCType->is_unsigned) {
+					uint64_t * ptr = (uint64_t *)push_cdata(L, -1, retCType);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
+					ptr[0] = ret.uintptrValue;
+				} else {
+					int64_t * ptr = (int64_t *)push_cdata(L, -1, retCType);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
+					ptr[0] = ret.intptrValue;
+				}
+				break;
+
+			// TODO test intptr_t size, and use boxed type vs lua number type?
+			case INTPTR_TYPE:
+				if (retCType->is_unsigned) {
+					uintptr_t * ptr = (uintptr_t *)push_cdata(L, -1, retCType);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
+					ptr[0] = ret.uintptrValue;
+				} else {
+					intptr_t * ptr = (intptr_t *)push_cdata(L, -1, retCType);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
+					ptr[0] = ret.intptrValue;
+				}
+				break;
+
+			case FLOAT_TYPE:
+				lua_pushnumber(L, ret.floatValue);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return number
+				break;
+			case DOUBLE_TYPE:
+				lua_pushnumber(L, ret.doubleValue);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return number
+				break;
+			case COMPLEX_FLOAT_TYPE:
+				{
+					complex_float * ptr = (complex_float *)push_cdata(L, -1, retCType);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
+					// TODO pointer-to-result, this will overflow and write oob
+					ptr[0] = ret.complex_floatValue;
+				}
+				break;
+			case COMPLEX_DOUBLE_TYPE:
+				{
+					complex_double * ptr = (complex_double *)push_cdata(L, -1, retCType);	// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1], return CData's uservalue
+					ptr[0] = ret.complex_doubleValue;
+				}
+				break;
+			default:
+				luaL_error(L, "NYI: call return type");
 			}
 		}
 	}
@@ -413,7 +410,7 @@ printf("compile_function() BEGIN func=%p\n", func);
 
 	// fill out types
 	size_t nargs = lua_rawlen(L, ct_usr);
-	
+
 	lua_pushvalue(L, ct_usr);					// stack: ..., p, stack[ct_usr],
 
 	// push the ffi_cif
@@ -422,11 +419,11 @@ printf("compile_function() BEGIN func=%p\n", func);
 printf("...callInfo %p\n", callInfo);
 	callInfo->func = func;
 	callInfo->nargs = nargs;
-	
+
 	callInfo->argTypes = (ffi_type**)safeAlloc(L, nargs * sizeof(ffi_type*));
 	callInfo->valueData = (CallValue*)safeAlloc(L, sizeof(CallValue) * nargs);
 	callInfo->valuePtrs = (void**)safeAlloc(L, sizeof(void*) * nargs);
-	
+
 	/*
 	Does this mean a function's CType userdata's uservalue 1 is a table of:
 	[0] = userdata of the CType of the return type

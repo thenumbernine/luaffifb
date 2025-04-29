@@ -22,8 +22,6 @@ int64_t test_s64();
 float test_f32();
 double test_f64();
 
-void* test_vp_sz(size_t x);
-
 void test_v_u8(uint8_t x);
 void test_v_s8(int8_t x);
 void test_v_u16(uint16_t x);
@@ -46,6 +44,9 @@ int64_t test_s64_s64(int64_t x);
 float test_f32_f32(float x);
 double test_f64_f64(double x);
 
+void* test_vp_sz(size_t x);
+char const * test_cp();
+
 uint8_t test_u8_u8_u8(uint8_t x, uint8_t y);
 int8_t test_s8_s8_s8(int8_t x, int8_t y);
 uint16_t test_u16_u16_u16(uint16_t x, uint16_t y);
@@ -63,23 +64,12 @@ local lib = ffi.load'libsimple_test.so'
 for rep=1,5 do
 print('!!!!!!!! BEGINNING REPEAT '..rep..' !!!!!!!!')
 	-- how to test void() functions... state change
-	
+
 	lib.var = 0
 	assert.eq(lib.var, 0)
 	print'test'
 	lib.test()
 	assert.eq(lib.var, 1)
-
--- [=[
-	print'test_vp' assert.eq(lib.test_vp(), ffi.new('void*', 0xdeadbeef))
---]=]
-
-	--[[ TODO FIXME casting C functions to cdata<void*> gives "unable to convert argument 2 from lua<function> to cdata<pointer>" from ffi.c type_error()
-	-- But in luajit it works
-	-- Because in our current implementation we are converting the C function to a lua_CFunction that's being called
-	-- To get this to work, we need to return CData of the C function and do this all in cdata_call ...
-	print'test_vp2' assert.eq(lib.test_vp2(), ffi.cast('void*', lib.test_vp2))	-- TODO can't
-	--]]
 
 	-- testing return
 	print'test_u8' assert.eq(lib.test_u8(), 42)
@@ -93,19 +83,28 @@ print('!!!!!!!! BEGINNING REPEAT '..rep..' !!!!!!!!')
 	print'test_f32' assert.eq(lib.test_f32(), -123)	-- at what point does this become testing floating point parsing accuracy ...
 	print'test_f64' assert.eq(lib.test_f64(), -123)	-- at what point does this become testing floating point parsing accuracy ...
 
+	print'test_vp' assert.eq(lib.test_vp(), ffi.new('void*', 0xdeadbeef))
+	--[[ TODO FIXME casting C functions to cdata<void*> gives "unable to convert argument 2 from lua<function> to cdata<pointer>" from ffi.c type_error()
+	-- But in luajit it works
+	-- Because in our current implementation we are converting the C function to a lua_CFunction that's being called
+	-- To get this to work, we need to return CData of the C function and do this all in cdata_call ...
+	print'test_vp2' assert.eq(lib.test_vp2(), ffi.cast('void*', lib.test_vp2))	-- TODO can't
+	--]]
+
+
 	-- testing return & single arguments
-	print'test_v_u8' lib.test_v_u8(42) assert.eq(lib.var, 42+1)	
+	print'test_v_u8' lib.test_v_u8(42) assert.eq(lib.var, 42+1)
 	print'test_v_s8' lib.test_v_s8(-42) assert.eq(lib.var, -42+1)
 	print'test_v_u16' lib.test_v_u16(345) assert.eq(lib.var, 345+1)
 	print'test_v_s16' lib.test_v_s16(-345) assert.eq(lib.var, -345+1)
 	print'test_v_u32' lib.test_v_u32(67890) assert.eq(lib.var, 67890+1)
 	print'test_v_s32' lib.test_v_s32(-67890) assert.eq(lib.var, -67890+1)
 	print'test_v_u64' lib.test_v_u64(ffi.new('uint64_t', 0x123456789)) assert.eq(lib.var, 0x23456789+1)
-	print'test_v_s64' lib.test_v_s64(ffi.new('int64_t', -0x123456789)) assert.eq(lib.var, -0x23456789+1)	
+	print'test_v_s64' lib.test_v_s64(ffi.new('int64_t', -0x123456789)) assert.eq(lib.var, -0x23456789+1)
 	print'test_v_f32' lib.test_v_f32(-123) assert.eq(lib.var, -123+1)	-- at what point does this become testing floating point parsing accuracy ...
 	print'test_v_f64' lib.test_v_f64(-123) assert.eq(lib.var, -123+1)	-- at what point does this become testing floating point parsing accuracy ...
 
-	
+
 	-- testing return & single arguments
 	-- TODO if I run this *block* multiple times then I get memory corruption problems somewhere deep inside libffi
 	print'test_u8_u8' assert.eq(lib.test_u8_u8(42), 42+1)
@@ -118,6 +117,9 @@ print('!!!!!!!! BEGINNING REPEAT '..rep..' !!!!!!!!')
 	print'test_s64_s64' assert.eq(lib.test_s64_s64(ffi.new('int64_t', -0x123456789)), ffi.new('int64_t', -0x123456789)+1)
 	print'test_f32_f32' assert.eq(lib.test_f32_f32(-123), -123+1)	-- at what point does this become testing floating point parsing accuracy ...
 	print'test_f64_f64' assert.eq(lib.test_f64_f64(-123), -123+1)	-- at what point does this become testing floating point parsing accuracy ...
+
+	print'test_vp_sz' assert.eq(lib.test_vp_sz(64), ffi.new('void*', 0xdeadbeef + 64))
+	print'test_cp' assert.eq(ffi.string(lib.test_cp()), "testing testing one two one two three")
 
 	-- testing return & double arguments
 	print'test_u8_u8_u8' assert.eq(lib.test_u8_u8_u8(42, 42), (42)+(42)+1)
