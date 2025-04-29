@@ -17,6 +17,9 @@ LDFLAGS+= -L/usr/local/lib/lua-5.4.7
 LDFLAGS+= -llua.5.4.7
 CFLAGS+= -fPIC
 
+# use LibFFI calls
+CFLAGS+= -DCALL_WITH_LIBFFI
+
 # if it's Linux ...
 #LDFLAGS+= -shared
 # if OSX ...
@@ -31,16 +34,18 @@ DEBUG=1
 ifeq ($(DEBUG),1)
 	# debug
 	CFLAGS+= -DDEBUG -O0 -gdwarf-2 -mfix-and-continue
-	TEST_CMD= lldb -- lua test.lua
+	TEST_CMD= echo -e 'bt\nquit' > lldb.batch && lldb --batch -K lldb.batch -o run -f lua -- test.lua
+	SIMPLE_TEST_CMD= echo -e 'bt\nquit' > lldb.batch && lldb --batch -K lldb.batch -o run -f lua -- simple_test.lua
 else
 	# release
 	CFLAGS+= -DNDEBUG -O2
 	TEST_CMD= lua test.lua
+	SIMPLE_TEST_CMD= lua simple_test.lua
 endif
 
-all: ffi.so libtest.so
+all: ffi.so libtest.so libsimple_test.so
 
-SRCS= call.c ctype.c ffi.c parser.c ffi_complex.c lua.c test.c
+SRCS= call.c ctype.c ffi.c parser.c ffi_complex.c lua.c test.c simple_test.c
 OBJS= $(patsubst %.c, %.o, $(SRCS))
 
 ffi.so: $(OBJS)
@@ -48,6 +53,10 @@ ffi.so: $(OBJS)
 	install_name_tool -change liblua.5.4.7.so /usr/local/lib/lua-5.4.7/liblua.5.4.7.so $@
 
 libtest.so: test.o
+	$(CC) $(LDFLAGS) -o $@ $^
+	install_name_tool -change liblua.5.4.7.so /usr/local/lib/lua-5.4.7/liblua.5.4.7.so $@
+
+libsimple_test.so: simple_test.o
 	$(CC) $(LDFLAGS) -o $@ $^
 	install_name_tool -change liblua.5.4.7.so /usr/local/lib/lua-5.4.7/liblua.5.4.7.so $@
 
@@ -61,6 +70,11 @@ clean:
 .PHONY: test
 test: ffi.so libtest.so
 	$(TEST_CMD)
+
+.PHONY: simple_test
+simple_test: ffi.so libsimple_test.so
+	$(SIMPLE_TEST_CMD)
+
 
 .PHONY: headers
 headers:

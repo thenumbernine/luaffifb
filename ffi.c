@@ -1581,14 +1581,11 @@ static int cdata_call(
 	// Why use rawget(upvalueindex(1)) when the upvalueindex(1) is already on the stack from check_cdata ?
 	// Does this mean a CData of a module C function has uservalue 1 = a table which,
 	//  for key of that CData userdata, the value is the lua_CFunction to call?
-
+	// Does it also assert (courtesy of this and do_new) that a CData's userdata's uservalue[1] = the CData's CType's userdata's uservalue[1] ?
 	// If the "closure" lua_CFunction associated with this CData-function is not present then generate it with compile_function()
-
-	// WAIT NO I WAS WRONG, cmodule_index AND cdata_call ARE TWO FULLY SEPARATE SCHEMES OF UPVALUES...
-	// WHAT A GIANT PIECE OF SHIT CODEBASE THIS IS, AND WHO EVER THOUGHT OF MAKING IT IN SUCH A MESSY PIECE OF SHIT WAY?
 	if (!lua_isfunction(L, -1)) {
 		lua_pop(L, 1);						// stack: f, ..., f_uv
-		compile_function(L, *p, -1, &ct);	// stack: f, ..., f_uv, some kind of lua_CFunction which the comments call "closure" as if that word hasn't been used a zillion times already
+		compile_function(L, *p, -1, &ct);	// stack: f, ..., f_uv, the lua_CFunction returned by compile_function that the comments call the "closure"
 
 		assert(lua_gettop(L) == top + 2); 	// stack: f, ..., f_uv, closure
 

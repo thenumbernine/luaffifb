@@ -91,7 +91,7 @@ void set_defined(lua_State* L, int ct_usr, CType* ct) {
 }
 
 /*
-Creates a new `CType` userdata, 
+Creates a new `CType` userdata,
 Copies its contents from `ct`,
 Sets its metatable to registry[ctype_mt_key],
 If `ct_usr` is nonzero then assigns it's 0th uservalue to `stack[ct_usr]`
@@ -255,7 +255,7 @@ void check_ctype(
 			|| equalsRegistry(L, -1, &cdata_mt_key)
 		)
 	) {													// stack: ..., getmetatable(stack[idx])
-		lua_pop(L, 1); 									// stack: ... 
+		lua_pop(L, 1); 									// stack: ...
 		// wait ... if it's a cdata ... then treat its userdata as a struct type ... why?
 		*ct = *(CType*)lua_touserdata(L, idx);	// stack: ...
 		lua_getuservalue(L, idx);						// stack: ..., stack[idx]'s uservalue 1
@@ -265,7 +265,7 @@ void check_ctype(
 	luaL_error(L, "expected cdata, ctype or string for arg #%d", idx);
 }
 
-/* 
+/*
 to_cdata returns the CData* and pushes the user value onto the stack.
 If the index is not a ctype then ct is set to the zero value such
 that ct->type is INVALID_TYPE, a nil is pushed, and NULL is returned.
