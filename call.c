@@ -59,22 +59,9 @@ typedef struct CallInfo {
 	int nargs;
 	ffi_type ** argTypes;
 	ffi_type * retType;
-	// maybe hardcode max args and don't worry about __gc free()ing these if you're lazy
 	void ** valuePtrs;	//allocated upon creation, size nargs, points into valueData
 	CallValue * valueData;
 } CallInfo;
-static int CallInfo_gc(lua_State* L) {
-	// check cdata bullshit? or nah?
-	// if you call this manually on non-CallInfo userdata then you are expecting it to break.
-	CallInfo * callInfo = (CallInfo *)lua_touserdata(L, 1);
-	free(callInfo->argTypes);
-	free(callInfo->valuePtrs); callInfo->valuePtrs = NULL;
-	free(callInfo->valueData); callInfo->valueData = NULL;
-	return 0;
-}
-static const luaL_Reg CallInfo_mt[] = {
-	{"__gc", CallInfo_gc},	// CallInfo::lua__gc ... when to switch to C++ ...
-};
 
 void compile_globals(JIT* jit, lua_State* L) {}
 
@@ -118,7 +105,7 @@ static inline ffi_type * getFFITypeForCType(
 
 
 // use debugging?
-#define DEBUG_LOG
+//#define DEBUG_LOG
 #if defined(DEBUG_LOG)
 #define DEBUGPRINT(...) printf(__VA_ARGS__)
 #else
@@ -398,15 +385,6 @@ CFunction compile_callback(lua_State* L, int fidx, int funcCTypeUserValueLoc, co
 	return (CFunction)NULL;
 }
 
-static void * safeAlloc(
-	lua_State * L,
-	size_t size
-) {
-	void * ptr = malloc(size);
-	if (!ptr) luaL_error(L, "malloc(%llu) failed", size);
-	return ptr;
-}
-
 /*
 funcCTypeUserValueLoc = index of the function's ctype's uservalue 1
 */
@@ -433,17 +411,27 @@ DEBUGPRINT("compile_function() BEGIN func=%p\n", func);
 
 	lua_pushvalue(L, funcCTypeUserValueLoc);					// stack: ..., p, stack[funcCTypeUserValueLoc],
 
-	// push the ffi_cif
-	CallInfo * callInfo = (CallInfo*)lua_newuserdata(L, sizeof(CallInfo));	// stack: ..., p, stack[funcCTypeUserValueLoc], CallInfo
-	memset(callInfo, 0, sizeof(CallInfo));
+	// make one giant allocation so I don't have to worry about my own __gc to free up stuff, because there seems to be exit race conditions where CallInfo's get freed and then their function called,which has a bad CallInfo ...
+	size_t callInfoBufSize =
+		sizeof(CallInfo)
+		+ nargs * sizeof(ffi_type*)	//  argType
+		+ nargs * sizeof(CallValue)	// valueData
+		+ nargs * sizeof(void*);	// valuePtrs
+	CallInfo * callInfo = (CallInfo*)lua_newuserdata(L, callInfoBufSize);	// stack: ..., p, stack[funcCTypeUserValueLoc], CallInfo
 DEBUGPRINT("...callInfo %p\n", callInfo);
-	callInfo->func = func;
-	callInfo->nargs = nargs;
-
-	callInfo->argTypes = (ffi_type**)safeAlloc(L, nargs * sizeof(ffi_type*));
-	callInfo->valueData = (CallValue*)safeAlloc(L, sizeof(CallValue) * nargs);
-	callInfo->valuePtrs = (void**)safeAlloc(L, sizeof(void*) * nargs);
-
+	memset(callInfo, 0, callInfoBufSize);
+	{
+		uint8_t * p = (uint8_t *)callInfo + sizeof(CallInfo);
+		callInfo->func = func;
+		callInfo->nargs = nargs;
+		callInfo->argTypes = (ffi_type**)p;
+		p += nargs * sizeof(ffi_type*);
+		callInfo->valueData = (CallValue*)p;
+		p += nargs * sizeof(CallValue);
+		callInfo->valuePtrs = (void**)p;
+		p += nargs * sizeof(void*);
+		assert(p == (uint8_t*)callInfo+callInfoBufSize);
+	}
 	/*
 	Does this mean a function's CType userdata's uservalue 1 is a table of:
 	[0] = userdata of the CType of the return type
@@ -475,12 +463,6 @@ DEBUGPRINT("return luaffi-type-name=%s libffi-type-ptr=%p libffi-type=%d\n", lua
 lua_pop(L, 2);	// typename string & arg's ctype's userdata's uservalue
 #endif
 	lua_pop(L, 1);
-
-
-	// TODO recycle this later when I care
-	lua_newtable(L);			// stack: ...up to CallInfo, mt
-	luaL_setfuncs(L, CallInfo_mt, 0);
-	lua_setmetatable(L, -2);	// stack: ...up to CallInfo
 
 	// TODO
 	// https://www.chiark.greenend.org.uk/doc/libffi-dev/html/The-Basics.html

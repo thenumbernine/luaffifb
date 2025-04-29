@@ -1457,7 +1457,7 @@ static int cdata_gc(lua_State* L)
 	check_cdata(L, 1, &ct);
 	lua_settop(L, 1);
 
-	/* call the gc func if there is any registered */
+	// call the gc func if there is any registered
 	lua_pushvalue(L, 1);
 	lua_rawget(L, lua_upvalueindex(2));
 	if (!lua_isnil(L, -1)) {
@@ -1465,7 +1465,7 @@ static int cdata_gc(lua_State* L)
 		lua_pcall(L, 1, 0, 0);
 	}
 
-	/* unset the closure */
+	// unset the closure
 	lua_pushvalue(L, 1);
 	lua_pushnil(L);
 	lua_rawset(L, lua_upvalueindex(1));
