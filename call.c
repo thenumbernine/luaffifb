@@ -148,7 +148,6 @@ printf("...callInfo %p\n", callInfo);
 		const CType * argCType = (const CType*) lua_touserdata(L, -1);
 		
 		CallValue * argValue = &callInfo->valueData[i-1];
-//callInfo->valuePtrs[i-1] = argValue;
 		assert(callInfo->valuePtrs[i-1] == argValue);
 		
 		lua_getuservalue(L, -1);
@@ -183,12 +182,8 @@ printf("...INT8_TYPE...\n");
 				if (argCType->is_unsigned) {
 					argValue->uint8Value = check_uint32(L, i);
 printf("...%u\n", argValue->uint8Value);
-//callInfo->valuePtrs[i-1] = &argValue->uint8Value;
-//callInfo->valuePtrs[i-1] = (void*)argValue->uint8Value;
 				} else {
 					argValue->int8Value = check_int32(L, i);
-//callInfo->valuePtrs[i-1] = &argValue->int8Value;
-//callInfo->valuePtrs[i-1] = (void*)argValue->int8Value;
 printf("...%d\n", argValue->int8Value);
 				}
 				break;
@@ -405,25 +400,6 @@ void compile_function(
 	const CType * ct
 ) {								// stack: ...
 printf("compile_function() BEGIN func=%p\n", func);
-
-#define ECHO(x) printf(">>> libffi type=" #x " type-ptr=%p type=%d\n", &x, x.type);
-ECHO(ffi_type_void)
-ECHO(ffi_type_uint8)
-ECHO(ffi_type_sint8)
-ECHO(ffi_type_uint16)
-ECHO(ffi_type_sint16)
-ECHO(ffi_type_uint32)
-ECHO(ffi_type_sint32)
-ECHO(ffi_type_uint64)
-ECHO(ffi_type_sint64)
-ECHO(ffi_type_float)
-ECHO(ffi_type_double)
-ECHO(ffi_type_pointer)
-ECHO(ffi_type_longdouble)
-ECHO(ffi_type_complex_float)
-ECHO(ffi_type_complex_double)
-ECHO(ffi_type_complex_longdouble)
-#undef ECHO
 
 	//int top = lua_gettop(L);
 	ct_usr = lua_absindex(L, ct_usr);
