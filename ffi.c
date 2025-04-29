@@ -1433,41 +1433,23 @@ static int ffi_offsetof(lua_State* L)
 	return 3;
 }
 
-static int ffi_istype(lua_State* L)
-{
-	CType tt, ft;
-	check_ctype(L, 1, &tt);
-	to_cdata(L, 2, &ft);
+static int ffi_istype(
+	lua_State* L
+) {							// stack: typedesc, obj
+	CType tt;
+	check_ctype(L, 1, &tt);	// stack: typedesc, obj, ttuv = typedesc's CType userdata's uservalue[1]
 
-	if (ft.type == INVALID_TYPE) {
-		goto fail;
-	}
+	CType ft;
+	to_cdata(L, 2, &ft);	// stack: typedesc, obj, ttuv, objuv = obj's CType userdata's uservalue[1]
 
-	if (!is_same_type(L, 3, 4, &tt, &ft)) {
-		goto fail;
-	}
-
-	if (tt.pointers != ft.pointers) {
-		goto fail;
-	}
-
-	if (tt.is_array != ft.is_array) {
-		goto fail;
-	}
-
-	if (tt.is_array && tt.array_size != ft.array_size) {
-		goto fail;
-	}
-
-	if (tt.calling_convention != ft.calling_convention) {
-		goto fail;
-	}
-
-	lua_pushboolean(L, 1);
-	return 1;
-
-fail:
-	lua_pushboolean(L, 0);
+	lua_pushboolean(L,
+		!(ft.type == INVALID_TYPE)
+		&& !(!is_same_type(L, 3, 4, &tt, &ft))
+		&& !(tt.pointers != ft.pointers)
+		&& !(tt.is_array != ft.is_array)
+		&& !(tt.is_array && tt.array_size != ft.array_size)
+		&& !(tt.calling_convention != ft.calling_convention)
+	);
 	return 1;
 }
 
@@ -2589,7 +2571,7 @@ static const char* etype_tostring(int type)
 	}
 }
 
-static void print_type(lua_State* L, const CType* ct)
+void print_type(lua_State* L, const CType* ct)
 {
 	lua_pushfstring(L, " sz %d %d %d align %d ptr %d %d %d type %s%s %d %d %d name %d call %d %d var %d %d %d bit %d %d %d %d jit %d",
 			/* sz */

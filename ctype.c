@@ -231,7 +231,7 @@ Looks at the stack index `idx`,
 If it's a string then parses it.
 If it's a ctype or cdata metatable then uses the associated ctype.
 Writes the ctype to `ct`.
-Pushes the ctype's uservalue 1 onto the stack ...
+Pushes the CType's userdata's uservalue[1] onto the stack ...
 ... for ctype, this is some weird arg, either {} for complex or nil
 ... for cdata, what is this?
 And how come it's casting cdata_mt_key's as CType?

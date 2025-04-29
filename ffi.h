@@ -244,3 +244,4 @@ void unpack_varargs_reg(lua_State* L, int first, int last, char* to);
 void unpack_varargs_stack_skip(lua_State* L, int first, int last, int ints_to_skip, int floats_to_skip, char* to);
 void unpack_varargs_float(lua_State* L, int first, int last, int max, char* to);
 void unpack_varargs_int(lua_State* L, int first, int last, int max, char* to);
+void print_type(lua_State* L, const CType* ct);

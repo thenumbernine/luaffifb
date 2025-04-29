@@ -413,42 +413,46 @@ printf("compile_function() BEGIN func=%p\n", func);
 
 	// fill out types
 	size_t nargs = lua_rawlen(L, ct_usr);
-	// if lua errors before we free this then it might leak ... 
-	ffi_type ** argFFITypes = (ffi_type**)safeAlloc(L, nargs * sizeof(ffi_type*));
+	
+	lua_pushvalue(L, ct_usr);					// stack: ..., p, stack[ct_usr],
 
+	// push the ffi_cif
+	CallInfo * callInfo = (CallInfo*)lua_newuserdata(L, sizeof(CallInfo));	// stack: ..., p, stack[ct_usr], CallInfo
+	memset(callInfo, 0, sizeof(CallInfo));
+printf("...callInfo %p\n", callInfo);
+	callInfo->func = func;
+	callInfo->nargs = nargs;
+	
+	callInfo->argTypes = (ffi_type**)safeAlloc(L, nargs * sizeof(ffi_type*));
+	callInfo->valueData = (CallValue*)safeAlloc(L, sizeof(CallValue) * nargs);
+	callInfo->valuePtrs = (void**)safeAlloc(L, sizeof(void*) * nargs);
+	
 	/*
 	Does this mean a function's CType userdata's uservalue 1 is a table of:
 	[0] = userdata of the CType of the return type
 	[i] = userdata of the CType of the i'th arg type, for i>0
 	*/
 	for (int i = 1; i <= nargs; i++) {
+		callInfo->valuePtrs[i-1] = &callInfo->valueData[i-1];
 		lua_rawgeti(L, ct_usr, i);
 		CType const * argCType = (CType const *)lua_touserdata(L, -1);
-		argFFITypes[i-1] = getFFITypeForCType(L, argCType);
-printf("args[%d] setting libffi-type-ptr=%p libffi-type=%d\n", i, argFFITypes[i-1], argFFITypes[i-1]->type);
+		callInfo->argTypes[i-1] = getFFITypeForCType(L, argCType);
+printf("args[%d] setting libffi-type-ptr=%p libffi-type=%d\n", i, callInfo->argTypes[i-1], callInfo->argTypes[i-1]->type);
+print_type(L, argCType);
+printf("... for CType %s\n", lua_tostring(L, -1));
+lua_pop(L, 1);
 		lua_pop(L, 1);
 	}
 
 	lua_rawgeti(L, ct_usr, 0);
 	CType const * retCType = (CType const *)lua_touserdata(L, -1);
-	ffi_type * retFFIType = getFFITypeForCType(L, retCType);
-printf("return libffi-type-ptr=%p libffi-type=%d\n", retFFIType, retFFIType->type);
+	callInfo->retType = getFFITypeForCType(L, retCType);
+printf("return libffi-type-ptr=%p libffi-type=%d\n", callInfo->retType, callInfo->retType->type);
+print_type(L, retCType);
+printf("... for CType %s\n", lua_tostring(L, -1));
+lua_pop(L, 1);
 	lua_pop(L, 1);
 
-	lua_pushvalue(L, ct_usr);					// stack: ..., p, stack[ct_usr],
-
-	// push the ffi_cif
-	CallInfo * callInfo = (CallInfo*)lua_newuserdata(L, sizeof(CallInfo));	// stack: ..., p, stack[ct_usr], CallInfo
-printf("...callInfo %p\n", callInfo);
-	callInfo->func = func;
-	callInfo->nargs = nargs;
-	callInfo->argTypes = argFFITypes;	
-	callInfo->retType = retFFIType;
-	callInfo->valueData = (CallValue*)safeAlloc(L, sizeof(CallValue) * nargs);
-	callInfo->valuePtrs = (void**)safeAlloc(L, sizeof(void*) * nargs);
-	for (int i = 0; i < nargs; ++i) {
-		callInfo->valuePtrs[i] = &callInfo->valueData[i];
-	}
 
 	// TODO recycle this later when I care
 	lua_newtable(L);			// stack: ...up to CallInfo, mt
