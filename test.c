@@ -140,8 +140,10 @@ int print_b(char* buf, _Bool val) {return sprintf(buf, "%s", val ? "true" : "fal
 int print_b2(char* buf, _Bool val) {return sprintf(buf, "%s", val ? "true" : "false");}
 
 EXPORT bool (*ret_fp(bool (*val)(bool)))(bool);
-bool (*ret_fp(bool (*val)(bool)))(bool)
-{return val;}
+bool (*ret_fp(bool (*val)(bool)))(bool) {
+	printf("ret_fp got %p\n", val);
+	return val;
+}
 
 #define OFFSETOF(STRUCT, MEMBER) ((int) ((char*) &STRUCT.MEMBER - (char*) &S - 1))
 

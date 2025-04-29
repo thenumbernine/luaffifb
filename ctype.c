@@ -158,9 +158,9 @@ If `ct_usr` is nonzero then assigns it's 0th uservalue to `stack[ct_usr]`
 Returns the pointer past the cdata to hold the cdata's contents.
 */
 void * push_cdata(
-	lua_State* L,
+	lua_State * L,
 	int ct_usr,
-	const CType* ct
+	CType const * ct
 ) {										// stack: ...
 	ct_usr = lua_absindex(L, ct_usr);
 
