@@ -33,16 +33,40 @@ JIT* get_jit(lua_State* L) {
 
 #if defined(CALL_WITH_LIBFFI)
 
+
 // Put this in a "dynasm/dasm_wasm.h" / "call_wasm.h" to be like the other.
 // But really, this is going to be the libffi-based calling mechanism, which will work on any OS/ARCH
 
 // wasm libffi compile_ goes here, not somewhere else, cuz I want to generate a diff patch
+#ifdef __cplusplus
+extern "C" {	// because linking errors with the &ffi_type_* externs
+#endif
 #include <ffi.h>
+#ifdef __cplusplus
+}
+#endif
+
+
+#ifndef FFI_TARGET_HAS_COMPLEX_TYPE
+#error FFI_TARGET_HAS_COMPLEX_TYPE should be enabled in your libffi ffi.h
+#endif
+#ifndef HAVE_COMPLEX
+#error HAVE_COMPLEX should be enabled in your luaffifb ffi_complex.h
+#endif
+
+
+
 
 // I would use ffi_raw but it doesn't have double, so here I'm making my own ...
 typedef union {
+#if defined(__wasm__)	// I want to use the larger of intptr_t and int64_t ... for now here is this ...
+	int64_t intptrValue;
+	uint64_t uintptrValue;
+#else
+static_assert(sizeof(intptr_t) >= sizeof(int64_t), "CallValue intptr_t can't handle int64_t fair warning");
 	intptr_t intptrValue;
 	uintptr_t uintptrValue;
+#endif
 	float floatValue;
 	double doubleValue;
 	complex_float complex_floatValue;
@@ -50,8 +74,8 @@ typedef union {
 	char data[sizeof(complex_double)];
 	void* ptr;
 } CallValue;
-static_assert(sizeof(intptr_t) >= sizeof(int64_t), "CallValue intptr_t can't handle int64_t fair warning");
 static_assert(sizeof(CallValue) >= sizeof(ffi_raw), "CallValue can't be used to return ffi_call results");
+static_assert(sizeof(CallValue) >= sizeof(int64_t), "CallValue can't be used for int64_t results");
 
 typedef struct CallInfo {
 	ffi_cif cif;
@@ -90,7 +114,7 @@ static inline ffi_type * getFFITypeForCType(
 	case ENUM_TYPE:
 		return ctype->is_unsigned ? &ffi_type_uint32 : &ffi_type_sint32;
 	case INT64_TYPE:
-		return &ffi_type_sint64;
+		return ctype->is_unsigned ? &ffi_type_uint64 : &ffi_type_sint64;
 	case COMPLEX_FLOAT_TYPE:
 		return &ffi_type_complex_float;
 	case COMPLEX_DOUBLE_TYPE:
