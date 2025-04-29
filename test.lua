@@ -134,6 +134,7 @@ struct Date3 {
 };
 
 // For checking the alignment and container of int64 bitfields
+// Fun Fact, this isn't valid in LuaJIT: https://github.com/LuaJIT/LuaJIT/issues/951
 struct bit64 {
     char pad;
     uint64_t a : 15;
