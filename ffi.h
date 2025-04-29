@@ -217,12 +217,7 @@ enum {
 
 #include "types.h"	// CFunction
 
-void push_type_name(lua_State* L, int usr, const CType* ct);
-
 int push_user_mt(lua_State* L, int ct_usr, const CType* ct);
-
-int ffi_cdef(lua_State* L);
-
 int x86_return_size(lua_State* L, int usr, const CType* ct);
 
 // WARNING: assembly needs to be updated for prototype changes of these functions

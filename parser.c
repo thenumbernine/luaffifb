@@ -1417,12 +1417,18 @@ static void append_type_name(luaL_Buffer* B, int usr, const CType* ct, enum name
 	}
 }
 
-void push_type_name(lua_State* L, int usr, const CType* ct)
-{
-	luaL_Buffer B;
+void push_type_name(
+	lua_State* L,
+	int usr,
+	CType const * ct
+) {
 	usr = lua_absindex(L, usr);
+
+	luaL_Buffer B;
 	luaL_buffinit(L, &B);
+
 	append_type_name(&B, usr, ct, BOTH);
+
 	luaL_pushresult(&B);
 }
 
@@ -1956,11 +1962,9 @@ static void parse_typedef(lua_State* L, Parser* P) {
 	assert(lua_gettop(L) == top);
 }
 
-static bool is_hex(char ch)
-{ return ('0' <= ch && ch <= '9') || ('a' <= ch && ch <= 'f') || ('A' <= ch && ch <= 'F'); }
+static bool is_hex(char ch) { return ('0' <= ch && ch <= '9') || ('a' <= ch && ch <= 'f') || ('A' <= ch && ch <= 'F'); }
 
-static bool is_digit(char ch)
-{ return '0' <= ch && ch <= '9'; }
+static bool is_digit(char ch) { return '0' <= ch && ch <= '9'; }
 
 static int from_hex(char ch)
 {

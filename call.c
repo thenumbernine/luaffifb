@@ -9,6 +9,7 @@
 
 #include "ffi.h"
 #include "call.h"
+#include "parser.h"	//push_type_name
 #include "ctype.h"	// push_cdata only used by CALL_WITH_LIBFFI
 
 // has DASM_CHECKS in it which sometimes is used by the dynasm/dasc_*.h files included below
@@ -229,11 +230,16 @@ printf("calling func=%p\n", callInfo->func);
 	{
 		lua_rawgeti(L, ct_usr, 0);		// stack: closure_func, args..., return type's CType's userdata = closure_func's upvalue[2]'s [0]
 		const CType * mbr_ct = (const CType *)lua_touserdata(L, -1);
-printf("...ret luaffi type %d\n", mbr_ct->type);
 
 		// So when creating CData, I'm supposed to get the CType's uservalue1 and forward that on to the CData's uservalue1, right?
 		// I think I see that going on in `do_new` ...
 		lua_getuservalue(L, -1);		// stack: closure_func, args..., return type's CType's userdata, return type's CType's userdata's uservalue[1]
+
+		push_type_name(L, -1, mbr_ct);
+printf("...ret luaffi type=%d name=%s\n", mbr_ct->type, lua_tostring(L, -1));
+		lua_pop(L, 1);
+
+		if (mbr_ct->type == VOID_TYPE) return 0;
 
 		if (mbr_ct->pointers || mbr_ct->is_reference) {
 			// the function returned a pointer ...
@@ -246,8 +252,7 @@ printf("...pointer %p\n", ret.ptr);
 
 		} else {
 			switch (mbr_ct->type) {
-			case VOID_TYPE:
-				return 0;
+
 			case FUNCTION_PTR_TYPE:
 				luaL_error(L, "TODO FUNCTION_PTR_TYPE %s:%d", __FILE__, __LINE__);
 				break;
