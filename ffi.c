@@ -710,6 +710,10 @@ err:
 Gets the address of the wrapped C function for the lua function value at idx.
 Returns 1 if it exists; otherwise returns 0 and nothing is pushed.
 Leaves the stack.
+
+Wait, is this retrieving what is stored in `push_callback()`?
+... which set the lua_CFunction's last-upvalue to userdata<CFunction[2]> ?
+IT WOULD HELP IT IF SOMEONE WOULD HAVE NOTED THAT.
 */
 static int get_cfunction_address(
 	lua_State* L,
@@ -768,8 +772,7 @@ static CFunction check_cfunction(lua_State* L, int idx, int to_usr, const CType*
 			return f;
 		}
 
-		/* Function cdatas are pinned and must be manually cleaned up by
-		 * calling func:free(). */
+		// Function cdatas are pinned and must be manually cleaned up by calling func:free(). 
 		pushRegistry(L, &callbacks_key);
 		f = compile_callback(L, idx, to_usr, tt);
 		lua_pushboolean(L, 1);
@@ -1528,17 +1531,33 @@ static int cdata_set(lua_State* L)
 }
 
 /*
-stack[1] is the check_cdata/CFunction object ...
-	... that a few lines later it calls "closures" ...
-	... cmodule_call says "ct_usr" ...
-upvalue[1] of stack[1] is ... a lua_CFunction ... of ...
+TODO WHO ACTUALLY CALLS THIS?!??!?!??!?
+- cmodule C functions don't, they wrap in lua_CFunction/lua-function closures, and are not objects.
+- callbacks don't either ... how does that work anyways? compile_callback() in call_x64.h pushes a CData on the stack, so how come calling it doesn't trigger this?
+I guess that only leaves cdata with metatables with __call field defined.
+AND YES, CData mt.__call DOES CALL HERE ... and handles the first condition ... and returns.
+SO WHAT IS ALL THE SUBSEUQNT FUNCTION_PTR_TYPE STUFF FOR?!?!?!
+YES, VERIFIED, functoin pointers from C do get past the FUNCTION_PTR_TYPE condition below..
+That means "FUNCTION_PTR_TYPE" is only for function-pointers returned from C.
+
+Maybe it's for function-ptrs returned from C functions?
+
+
+This function is only for:
+- CData with __call metamethods
+- C function-ptrs retrieved from C API
+
+Everything else is handled elsewhere.
+
+stack[1] is CData
 */
 static int cdata_call(
-	lua_State* L
-) {									// stack: f, ...
+	lua_State * L
+) {									// stack: obj, ...
+printf("cdata_call top=%d\n", lua_gettop(L));	
 	int top = lua_gettop(L);
 	CType ct;
-	CFunction * p = (CFunction *)check_cdata(L, 1, &ct);	// stack: f, ..., f_uv = f's CData's uservalue 1
+	CFunction * p = (CFunction *)check_cdata(L, 1, &ct);	// stack: obj, ..., obj_uv = obj's CData's uservalue 1
 
 	if (push_user_mt(L, -1, &ct)) {
 		lua_pushliteral(L, "__call");
@@ -1550,33 +1569,34 @@ static int cdata_call(
 			lua_call(L, lua_gettop(L) - 1, LUA_MULTRET);
 			return lua_gettop(L);
 		}
-	}	// stack: f, ..., f_uv
+	}	// stack: obj, ..., obj_uv
 
 	if (ct.pointers || ct.type != FUNCTION_PTR_TYPE) {
 		return luaL_error(L, "only function callbacks are callable");
 	}
 
-	lua_pushvalue(L, 1);					// stack: f, ..., f_uv, f
-	lua_rawget(L, lua_upvalueindex(1));		// stack: f, ..., f_uv, closure = f_uv[f]
+	lua_pushvalue(L, 1);					// stack: obj, ..., obj_uv, obj
+	lua_rawget(L, lua_upvalueindex(1));		// stack: obj, ..., obj_uv, closure = obj_uv[obj]
+printf("cdata_call uservalue is same? %d\n", lua_rawequal(L, -1, -2));
 	// Why use rawget(upvalueindex(1)) when the upvalueindex(1) is already on the stack from check_cdata ?
 	// Does this mean a CData of a module C function has uservalue 1 = a table which,
 	//  for key of that CData userdata, the value is the lua_CFunction to call?
 	// Does it also assert (courtesy of this and do_new) that a CData's userdata's uservalue[1] = the CData's CType's userdata's uservalue[1] ?
 	// If the "closure" lua_CFunction associated with this CData-function is not present then generate it with compile_function()
 	if (!lua_isfunction(L, -1)) {
-		lua_pop(L, 1);						// stack: f, ..., f_uv
-		compile_function(L, *p, -1, &ct);	// stack: f, ..., f_uv, the lua_CFunction returned by compile_function that the comments call the "closure"
+		lua_pop(L, 1);						// stack: obj, ..., obj_uv
+		compile_function(L, *p, -1, &ct);	// stack: obj, ..., obj_uv, the lua_CFunction returned by compile_function that the comments call the "closure"
 
-		assert(lua_gettop(L) == top + 2); 	// stack: f, ..., f_uv, closure
+		assert(lua_gettop(L) == top + 2); 	// stack: obj, ..., obj_uv, closure
 
 		// closures[func] = closure
-		lua_pushvalue(L, 1);				// stack: f, ..., f_uv, closure, f
-		lua_pushvalue(L, -2);				// stack: f, ..., f_uv, closure, f, closure
-		lua_rawset(L, lua_upvalueindex(1));	// stack: f, ..., f_uv, closure;  f_uv[f] = closure
+		lua_pushvalue(L, 1);				// stack: obj, ..., obj_uv, closure, obj
+		lua_pushvalue(L, -2);				// stack: obj, ..., obj_uv, closure, obj, closure
+		lua_rawset(L, lua_upvalueindex(1));	// stack: obj, ..., obj_uv, closure;  obj_uv[obj] = closure
 
-		lua_replace(L, 1);					// stack: closure, ..., f_uv
+		lua_replace(L, 1);					// stack: closure, ..., obj_uv
 	} else {
-		lua_replace(L, 1);					// stack: closure, ..., f_uv
+		lua_replace(L, 1);					// stack: closure, ..., obj_uv
 	}
 
 	lua_pop(L, 1);							// stack: closure, ...

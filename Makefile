@@ -18,7 +18,7 @@ LDFLAGS+= -llua.5.4.7
 CFLAGS+= -fPIC
 
 # use LibFFI calls
-CFLAGS+= -DCALL_WITH_LIBFFI
+#CFLAGS+= -DCALL_WITH_LIBFFI
 
 # if it's Linux ...
 #LDFLAGS+= -shared

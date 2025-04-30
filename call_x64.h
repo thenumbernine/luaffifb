@@ -497,17 +497,15 @@ static void add_float(Dst_DECL, const CType* ct, struct reg_alloc* reg, int is_d
 #define get_pointer(jit, ct, reg) get_int(jit, ct, reg, 0)
 #endif
 
-CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
-{
-	int i, nargs;
-	CFunction* pf;
+CFunction compile_callback(
+	lua_State * L,
+	int fidx,
+	int ct_usr,			// CType userdata uservalue[1], which holds the function ret/args[] in CType*'s
+	const CType * ct
+) {
 	CType ct2 = *ct;
-	const CType* mt;
-	struct reg_alloc reg;
-	int num_upvals = 0;
 	int top = lua_gettop(L);
-	JIT* Dst = get_jit(L);
-	int ref;
+	JIT*  Dst = get_jit(L);
 	int hidden_arg_off = 0;
 
 	ct_usr = lua_absindex(L, ct_usr);
@@ -515,9 +513,10 @@ CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 
 	assert(lua_isnil(L, fidx) || lua_isfunction(L, fidx));
 
+	struct reg_alloc reg;
 	memset(&reg, 0, sizeof(reg));
 #ifdef _WIN64
-	reg.off = 16 + REGISTER_STACK_SPACE(ct); /* stack registers are above the shadow space */
+	reg.off = 16 + REGISTER_STACK_SPACE(ct); // stack registers are above the shadow space 
 #elif __amd64__
 	reg.off = 16;
 #else
@@ -528,10 +527,10 @@ CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 
 	// add a table to store ctype and function upvalues
 	// callback_set assumes the first value is the lua function
-	nargs = (int) lua_rawlen(L, ct_usr);
+	int nargs = (int) lua_rawlen(L, ct_usr);
 	lua_newtable(L);
 	lua_pushvalue(L, -1);
-	ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	int ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	if (ct->has_var_arg) {
 		luaL_error(L, "can't create callbacks with varargs");
@@ -546,35 +545,39 @@ CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 	// hardcode the lua_State* value into the assembly
 	dasm_put(Dst, 157, (unsigned int)((uintptr_t)(L)), (unsigned int)(((uintptr_t)(L))>>32));
 
-	/* get the upval table */
+	// get the upval table 
 	dasm_put(Dst, 162, ref, LUA_REGISTRYINDEX);
 
-	/* get the lua function */
+	int num_upvals = 0;
+
+	// Save the lua function in some unique registry entry and pass the key along to compile()
 	lua_pushvalue(L, fidx);
 	lua_rawseti(L, -2, ++num_upvals);
 	assert(num_upvals == CALLBACK_FUNC_USR_IDX);
 	dasm_put(Dst, 178, num_upvals);
 
 #if !defined _WIN64 && !defined __amd64__
-	lua_rawgeti(L, ct_usr, 0);
-	mt = (const CType*) lua_touserdata(L, -1);
-	if (!mt->pointers && !mt->is_reference && mt->type == COMPLEX_DOUBLE_TYPE) {
-		hidden_arg_off = reg.off;
-		reg.off += sizeof(void*);
+	{
+		lua_rawgeti(L, ct_usr, 0);
+		CType const * mt = (CType const *)lua_touserdata(L, -1);
+		if (!mt->pointers && !mt->is_reference && mt->type == COMPLEX_DOUBLE_TYPE) {
+			hidden_arg_off = reg.off;
+			reg.off += sizeof(void*);
+		}
+		lua_pop(L, 1);
 	}
-	lua_pop(L, 1);
 #else
 	(void) hidden_arg_off;
 #endif
 
-	for (i = 1; i <= nargs; i++) {
+	for (int i = 1; i <= nargs; i++) {
 		lua_rawgeti(L, ct_usr, i);
-		mt = (const CType*) lua_touserdata(L, -1);
+		CType const * mt = (const CType*) lua_touserdata(L, -1);
 
 		if (mt->pointers || mt->is_reference) {
 			lua_getuservalue(L, -1);
-			lua_rawseti(L, -3, ++num_upvals); /* usr value */
-			lua_rawseti(L, -2, ++num_upvals); /* mt */
+			lua_rawseti(L, -3, ++num_upvals); // usr value 
+			lua_rawseti(L, -2, ++num_upvals); // mt 
 			/* on the lua stack in the callback:
 			 * upval tbl, lua func, i-1 args
 			 */
@@ -585,7 +588,7 @@ CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 			switch (mt->type) {
 			case INT64_TYPE:
 				lua_getuservalue(L, -1);
-				lua_rawseti(L, -3, ++num_upvals); /* mt */
+				lua_rawseti(L, -3, ++num_upvals); // mt 
 				lua_pop(L, 1);
 				dasm_put(Dst, 261, (unsigned int)((uintptr_t)(mt)), (unsigned int)(((uintptr_t)(mt))>>32));
 				get_int(Dst, ct, &reg, 1);
@@ -594,7 +597,7 @@ CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 
 			case INTPTR_TYPE:
 				lua_getuservalue(L, -1);
-				lua_rawseti(L, -3, ++num_upvals); /* mt */
+				lua_rawseti(L, -3, ++num_upvals); // mt 
 				lua_pop(L, 1);
 				dasm_put(Dst, 261, (unsigned int)((uintptr_t)(mt)), (unsigned int)(((uintptr_t)(mt))>>32));
 				get_pointer(Dst, ct, &reg);
@@ -604,12 +607,12 @@ CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 			case COMPLEX_FLOAT_TYPE:
 				lua_pop(L, 1);
 #if defined _WIN64 || defined __amd64__
-				/* complex floats are two floats packed into a double */
+				// complex floats are two floats packed into a double 
 				dasm_put(Dst, 261, (unsigned int)((uintptr_t)(mt)), (unsigned int)(((uintptr_t)(mt))>>32));
 				get_float(Dst, ct, &reg, 1);
 				dasm_put(Dst, 284);
 #else
-				/* complex floats are real followed by imag on the stack */
+				// complex floats are real followed by imag on the stack 
 				dasm_put(Dst, 261, (unsigned int)((uintptr_t)(mt)), (unsigned int)(((uintptr_t)(mt))>>32));
 				get_float(Dst, ct, &reg, 0);
 				dasm_put(Dst, 289);
@@ -621,10 +624,10 @@ CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 			case COMPLEX_DOUBLE_TYPE:
 				lua_pop(L, 1);
 				dasm_put(Dst, 261, (unsigned int)((uintptr_t)(mt)), (unsigned int)(((uintptr_t)(mt))>>32));
-				/* real */
+				// real 
 				get_float(Dst, ct, &reg, 1);
 				dasm_put(Dst, 284);
-				/* imag */
+				// imag 
 				get_float(Dst, ct, &reg, 1);
 				dasm_put(Dst, 296);
 				break;
@@ -682,7 +685,7 @@ CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 	}
 
 	lua_rawgeti(L, ct_usr, 0);
-	mt = (const CType*) lua_touserdata(L, -1);
+	CType const * mt = (const CType*) lua_touserdata(L, -1);
 
 	dasm_put(Dst, 362, (unsigned int)((uintptr_t)(0)), (unsigned int)(((uintptr_t)(0))>>32), (mt->pointers || mt->is_reference || mt->type != VOID_TYPE) ? 1 : 0, nargs);
 
@@ -691,16 +694,16 @@ CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 	// than lua_pop as lua_pop is implemented as a macro.
 	if (mt->pointers || mt->is_reference) {
 		lua_getuservalue(L, -1);
-		lua_rawseti(L, -3, ++num_upvals); /* usr value */
-		lua_rawseti(L, -2, ++num_upvals); /* mt */
+		lua_rawseti(L, -3, ++num_upvals); // usr value 
+		lua_rawseti(L, -2, ++num_upvals); // mt 
 		dasm_put(Dst, 382, num_upvals-1, (unsigned int)((uintptr_t)(mt)), (unsigned int)(((uintptr_t)(mt))>>32));
 
 	} else {
 		switch (mt->type) {
 		case ENUM_TYPE:
 			lua_getuservalue(L, -1);
-			lua_rawseti(L, -3, ++num_upvals); /* usr value */
-			lua_rawseti(L, -2, ++num_upvals); /* mt */
+			lua_rawseti(L, -3, ++num_upvals); // usr value 
+			lua_rawseti(L, -2, ++num_upvals); // mt 
 			dasm_put(Dst, 466, num_upvals-1, (unsigned int)((uintptr_t)(mt)), (unsigned int)(((uintptr_t)(mt))>>32));
 			break;
 
@@ -783,11 +786,12 @@ CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 
 	dasm_put(Dst, 967, x86_return_size(L, ct_usr, ct));
 
-	lua_pop(L, 1); /* upval table - already in registry */
+	lua_pop(L, 1); // upval table - already in registry 
 	assert(lua_gettop(L) == top);
 
 	ct2.is_jitted = 1;
-	pf = (CFunction*) push_cdata(L, ct_usr, &ct2);
+	CFunction* pf = (CFunction*) push_cdata(L, ct_usr, &ct2);
+	// Create a compile() function which converts the C->Lua args, calls, and converts Lua->C return type.
 	*pf = compile(Dst, L, NULL, ref);
 
 	assert(lua_gettop(L) == top + 1);
@@ -797,7 +801,7 @@ CFunction compile_callback(lua_State* L, int fidx, int ct_usr, const CType* ct)
 
 /*
 Builds the JIT code for calling the function based on its ct.
-Pushes the userdata of the function onto the stack.
+Pushes the lua_CFunction of the closure of the CFunction to call the original CFunction onto the stack.
 ct_usr = location of uservalue1 of the function CData userdata
 */
 void compile_function(
@@ -970,10 +974,10 @@ void compile_function(
 			case COMPLEX_FLOAT_TYPE:
 #if defined _WIN64 || defined __amd64__
 				dasm_put(Dst, 1323, i);
-				/* complex floats are two floats packed into a double */
+				// complex floats are two floats packed into a double 
 				add_float(Dst, ct, &reg, 1);
 #else
-				/* returned complex floats use eax and edx */
+				// returned complex floats use eax and edx 
 				dasm_put(Dst, 1335, i);
 				add_float(Dst, ct, &reg, 0);
 				dasm_put(Dst, 1353);
@@ -1018,75 +1022,50 @@ void compile_function(
 
 	dasm_put(Dst, 1454, (unsigned int)((uintptr_t)(perr)), (unsigned int)(((uintptr_t)(perr))>>32));
 
-	/* remove the stack space to call local functions */
+	// remove the stack space to call local functions 
 	dasm_put(Dst, 1468);
 
 #ifdef _WIN64
 	switch (reg.regs) {
 	case 4:
-		if (reg.is_float[3]) {
-		}
-		if (reg.is_int[3]) {
-		}
+		if (reg.is_float[3]) {}
+		if (reg.is_int[3]) {}
 	case 3:
-		if (reg.is_float[2]) {
-		}
-		if (reg.is_int[2]) {
-		}
+		if (reg.is_float[2]) {}
+		if (reg.is_int[2]) {}
 	case 2:
-		if (reg.is_float[1]) {
-		}
-		if (reg.is_int[1]) {
-		}
+		if (reg.is_float[1]) {}
+		if (reg.is_int[1]) {}
 	case 1:
-		if (reg.is_float[0]) {
-		}
-		if (reg.is_int[0]) {
-		}
-	case 0:
-		break;
+		if (reg.is_float[0]) {}
+		if (reg.is_int[0]) {}
+	case 0: break;
 	}
 
-	/* don't remove the space for the registers as we need 32 bytes of register overflow space */
+	// don't remove the space for the registers as we need 32 bytes of register overflow space 
 	assert(REGISTER_STACK_SPACE(ct) == 32);
 
 #elif defined __amd64__
 	switch (reg.floats) {
-	case 8:
-		dasm_put(Dst, 1473, 8*(MAX_INT_REGISTERS(ct)+7));
-	case 7:
-		dasm_put(Dst, 1482, 8*(MAX_INT_REGISTERS(ct)+6));
-	case 6:
-		dasm_put(Dst, 1491, 8*(MAX_INT_REGISTERS(ct)+5));
-	case 5:
-		dasm_put(Dst, 1500, 8*(MAX_INT_REGISTERS(ct)+4));
-	case 4:
-		dasm_put(Dst, 1509, 8*(MAX_INT_REGISTERS(ct)+3));
-	case 3:
-		dasm_put(Dst, 1518, 8*(MAX_INT_REGISTERS(ct)+2));
-	case 2:
-		dasm_put(Dst, 1527, 8*(MAX_INT_REGISTERS(ct)+1));
-	case 1:
-		dasm_put(Dst, 1536, 8*(MAX_INT_REGISTERS(ct)));
-	case 0:
-		break;
+	case 8: dasm_put(Dst, 1473, 8*(MAX_INT_REGISTERS(ct)+7));
+	case 7: dasm_put(Dst, 1482, 8*(MAX_INT_REGISTERS(ct)+6));
+	case 6: dasm_put(Dst, 1491, 8*(MAX_INT_REGISTERS(ct)+5));
+	case 5: dasm_put(Dst, 1500, 8*(MAX_INT_REGISTERS(ct)+4));
+	case 4: dasm_put(Dst, 1509, 8*(MAX_INT_REGISTERS(ct)+3));
+	case 3: dasm_put(Dst, 1518, 8*(MAX_INT_REGISTERS(ct)+2));
+	case 2: dasm_put(Dst, 1527, 8*(MAX_INT_REGISTERS(ct)+1));
+	case 1: dasm_put(Dst, 1536, 8*(MAX_INT_REGISTERS(ct)));
+	case 0: break;
 	}
 
 	switch (reg.ints) {
-	case 6:
-		dasm_put(Dst, 1545, 8*5);
-	case 5:
-		dasm_put(Dst, 1552, 8*4);
-	case 4:
-		dasm_put(Dst, 1559, 8*3);
-	case 3:
-		dasm_put(Dst, 1566, 8*2);
-	case 2:
-		dasm_put(Dst, 1573, 8*1);
-	case 1:
-		dasm_put(Dst, 1580);
-	case 0:
-		break;
+	case 6: dasm_put(Dst, 1545, 8*5);
+	case 5: dasm_put(Dst, 1552, 8*4);
+	case 4: dasm_put(Dst, 1559, 8*3);
+	case 3: dasm_put(Dst, 1566, 8*2);
+	case 2: dasm_put(Dst, 1573, 8*1);
+	case 1: dasm_put(Dst, 1580);
+	case 0: break;
 	}
 
 	dasm_put(Dst, 1585, REGISTER_STACK_SPACE(ct));
@@ -1234,4 +1213,12 @@ void compile_function(
 		push_callback(L, f, func);
 		lua_pushcclosure(L, (lua_CFunction)f, num_upvals + 1);
 	}
+
+
+#if 0
+	// Chris: Can I force luajit to always generate CData for functions?  Even at whatever cost of cleanup and leaks?
+	// Probably not since whoever called this expects a lua_CFunction,
+	// But maybe if you put this in the caller's code to make it pass on CData instead of a lua-function then the function-ptr-casting would work.
+	compile_callback(L, -1, ct_usr, ct);
+#endif
 }

@@ -142,10 +142,10 @@ upvalues:
 #1: funcCTypeUserValueLoc = the function's CType's uservalue[1] ... whatever that is
 #2: CallInfo userdata
 */
-static int luaffi_libffi_call(
+static int callLuaToCWrapper(
 	lua_State *L
 ) {						// stack: closure_func, args...
-DEBUGPRINT("luaffi_libffi_call BEGIN, top=%d\n", lua_gettop(L));
+DEBUGPRINT("callLuaToCWrapper BEGIN, top=%d\n", lua_gettop(L));
 	// CData userdata of the function is in upvalue[1]
 	// Does anyone ever use this, both here and in call_*.h ?
 	// In both our cases a lua_CFunction is returned
@@ -399,14 +399,8 @@ DEBUGPRINT("returning func ptr %p into container %p\n", p[0], p);
 		}
 	}
 
-DEBUGPRINT("luaffi_libffi_call DONE, top=%d returning %d\n\n", lua_gettop(L), nresult);
+DEBUGPRINT("callLuaToCWrapper DONE, top=%d returning %d\n\n", lua_gettop(L), nresult);
 	return nresult;
-}
-
-// TODO TODO always do this, so we're always returning cdata, which is castable, which doesn't run us into the bug that at present module functions cannot be cast to other ptrs
-CFunction compile_callback(lua_State* L, int fidx, int funcCTypeUserValueLoc, const CType* ct) {
-	luaL_error(L, "TODO compile_callback");
-	return (CFunction)NULL;
 }
 
 /*
@@ -439,9 +433,9 @@ DEBUGPRINT("compile_function() BEGIN func=%p\n", func);
 	// make one giant allocation so I don't have to worry about my own __gc to free up stuff, because there seems to be exit race conditions where CallInfo's get freed and then their function called,which has a bad CallInfo ...
 	size_t callInfoBufSize =
 		sizeof(CallInfo)
-		+ nargs * sizeof(ffi_type*)	//  argType
-		+ nargs * sizeof(CallValue)	// valueData
-		+ nargs * sizeof(void*);	// valuePtrs
+		+ sizeof(ffi_type*) * nargs	//  argType
+		+ sizeof(CallValue) * nargs	// valueData
+		+ sizeof(void*) * nargs;	// valuePtrs
 	CallInfo * callInfo = (CallInfo*)lua_newuserdata(L, callInfoBufSize);	// stack: ..., p, stack[funcCTypeUserValueLoc], CallInfo
 DEBUGPRINT("...callInfo %p\n", callInfo);
 	memset(callInfo, 0, callInfoBufSize);
@@ -504,9 +498,54 @@ lua_pop(L, 2);	// typename string & arg's ctype's userdata's uservalue
 	So it just executes like any other function would
 	*/
 
-	lua_pushcclosure(L, luaffi_libffi_call, 3);	// stack: ..., luaffi_libffi_call with closure of {p, stack[funcCTypeUserValueLoc], CallInfo}
+	lua_pushcclosure(L, callLuaToCWrapper, 3);	// stack: ..., callLuaToCWrapper with closure of {p, stack[funcCTypeUserValueLoc], CallInfo}
 DEBUGPRINT("compile_function() DONE\n\n");
+
+
+	/*
+	So it looks like in the call_x64.h compile_function() does push a CData<CFunction> userdata onto the stack and just toss it,
+	because then it pushes the lua_CFunction of the closure onto the stack, 
+	and any calls just goes to that lua_CFunction, and that's what we use from then on out.
+	Nobody sees the CData again, only the lua_CFunction, and that's why you cannot cast a dlsym'd function to void* or other CData-pointers. (A feature missing that's in original LuaJIT)
+	
+	Then there's call_x64.h's compile_callback(), and that does seem to push and leave the CData on the stack.
+	And then that CData's call behind-the-scenes uservalue[]'s are specified in the `cdata_call` function in ffi.c
+	
+
+	*/
+
 }
+
+static int callCToLuaWrapper(
+) {
+	return 0;
+}
+
+
+/* 
+TODO always do this, so we're always returning cdata, which is castable, which doesn't run us into the bug that at present module functions cannot be cast to other ptrs
+TODO this is gonna push a CData, so the call will have to be handled in cdata_call
+	so cdata_call will have to support the 
+	*) old JIT-based closure
+	*) the old closures-of-CFunctoins from compile_function() below which I gotta get rid of to get ffi-CFunction-casting to work
+	*) new CData closures that don't use JIT but do use LibFFI
+	*) new closures-of-CFunctions in compile_functin() TBD
+*/
+CFunction compile_callback(
+	lua_State* L,
+	int luaFuncLoc,
+	int funcCTypeUserValueLoc,
+	CType const * ct
+) {									// stack: ...
+	luaL_error(L, "TODO callbacks");
+
+	CFunction * pf = (CFunction*)push_cdata(L, funcCTypeUserValueLoc, ct);
+	//pf[0] = callCToLuaWrapper;	// compile function ... which converts the C->Lua args, calls, and converts Lua->C return type.
+	return *pf;
+}
+
+
+
 
 // stub functions
 
@@ -574,7 +613,7 @@ typedef struct JIT_head {
 
 #define LINKTABLE_MAX_SIZE (sizeof(extnames) / sizeof(extnames[0]) * (JUMP_SIZE))
 
-static CFunction compile(JIT* jit, lua_State* L, CFunction func, int ref)
+static CFunction compile(JIT * jit, lua_State * L, CFunction func, int ref)
 {
 	JIT_head* code;
 	size_t codesz;

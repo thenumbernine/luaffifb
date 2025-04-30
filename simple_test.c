@@ -58,3 +58,10 @@ uint64_t test_u64_u64_u64(uint64_t x, uint64_t y) { return x+y+1; }
 int64_t test_s64_s64_s64(int64_t x, int64_t y) { return x+y+1; }
 float test_f32_f32_f32(float x, float y) { return x+y+1; }
 double test_f64_f64_f64(double x, double y) { return x+y+1; }
+
+void hidden_v() { var = 1357; }
+
+typedef void (*VFP)();
+VFP test_vfp() { return hidden_v; }
+void test_v_vfp(VFP f) { f(); }
+VFP test_vfp_vfp(VFP f) { return f; }
