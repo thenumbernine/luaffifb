@@ -49,3 +49,8 @@ void free_code(JIT* jit, lua_State* L, CFunction func);
 // so same once again, it goes here
 #define Dst_DECL	JIT* Dst
 #define Dst_REF		(Dst->ctx)
+
+
+// Used with the LibFFI calls:
+
+int callLuaToCWithLibFFI(lua_State *L);

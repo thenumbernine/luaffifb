@@ -153,6 +153,8 @@ EXTERN_C EXPORT int luaopen_ffi(lua_State* L);
 #define ALIGNED_DEFAULT PTR_ALIGN_MASK
 #endif
 
+// Chris: 🤦...
+//  These are used in random places with random things for random reasons
 extern int jit_key;
 extern int ctype_mt_key;
 extern int cdata_mt_key;

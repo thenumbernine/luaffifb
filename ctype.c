@@ -119,7 +119,7 @@ CType* push_ctype(
 
 	if (ct_usr && !lua_isnil(L, ct_usr)) {
 		lua_pushvalue(L, ct_usr);		// stack: ..., u, stack[ct_usr]
-		lua_setuservalue(L, -2);		// stack: ..., u;  u's uservalue 1 is set to stack[ct_usr]
+		lua_setuservalue(L, -2);		// stack: ..., u;  u's uservalue[1] is set to stack[ct_usr]
 	}
 
 	// if stack[ct_usr] is not nil then set stack[ct_usr][&to_define_key][u] = true
@@ -196,7 +196,7 @@ void * push_cdata(
 
 	if (ct_usr && !lua_isnil(L, ct_usr)) {
 		lua_pushvalue(L, ct_usr);		// stack: ..., u, stack[ct_usr]
-		lua_setuservalue(L, -2);		// stack: ..., u;  u's uservalue 1 is set to stack[ct_usr]
+		lua_setuservalue(L, -2);		// stack: ..., u;  u's uservalue[1] is set to stack[ct_usr]
 	}
 
 	pushRegistry(L, &cdata_mt_key);		// stack: ..., u, registry[&cdata_mt_key]
@@ -243,7 +243,7 @@ void check_ctype(
 ) {											// stack: ...
 	if (lua_isstring(L, idx)) {
 		Parser P = newParser(lua_tostring(L, idx));
-		parse_type(L, &P, ct);						// stack: ..., ct's userdata's uservalue 1
+		parse_type(L, &P, ct);						// stack: ..., ct's userdata's uservalue[1]
 		parse_argument(L, &P, -1, ct, NULL, NULL);	// stack: ..., ctype uservalue, ... arg uservalue or new ctype uservalue which is it?
 		lua_remove(L, -2); 							// stack: ..., parse_argument returned uservalue
 		return;
@@ -258,7 +258,7 @@ void check_ctype(
 		lua_pop(L, 1); 									// stack: ...
 		// wait ... if it's a cdata ... then treat its userdata as a struct type ... why?
 		*ct = *(CType*)lua_touserdata(L, idx);	// stack: ...
-		lua_getuservalue(L, idx);						// stack: ..., stack[idx]'s uservalue 1
+		lua_getuservalue(L, idx);						// stack: ..., stack[idx]'s uservalue[1]
 		return;
 	}
 
@@ -289,7 +289,7 @@ void * to_cdata(lua_State* L, int idx, CType* ct) {
 	lua_pop(L, 1);									// stack: ...
 	CData * cd = (CData *)lua_touserdata(L, idx);
 	*ct = cd->type;
-	lua_getuservalue(L, idx);						// stack: ..., stack[idx]'s uservalue 1
+	lua_getuservalue(L, idx);						// stack: ..., stack[idx]'s uservalue[1]
 
 	if ((ct->is_reference)
 		|| (ct->pointers && !ct->is_array)
@@ -301,7 +301,7 @@ void * to_cdata(lua_State* L, int idx, CType* ct) {
 }
 
 /*
-pushes the CData's userdata's uservalue1 onto the stack
+pushes the CData's userdata's uservalue[1] onto the stack
 returns the CData*
 */
 void * check_cdata(
@@ -309,7 +309,7 @@ void * check_cdata(
 	int idx,
 	CType * ct
 ) {											// stack: ...
-	void * p = to_cdata(L, idx, ct);		// stack: ..., stack[idx]'s uservalue 1 if it is a CData, nil otherwise
+	void * p = to_cdata(L, idx, ct);		// stack: ..., stack[idx]'s uservalue[1] if it is a CData, nil otherwise
 	if (ct->type == INVALID_TYPE) {
 		luaL_error(L, "expected cdata for arg #%d", idx);
 	}

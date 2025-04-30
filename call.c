@@ -139,13 +139,16 @@ static inline ffi_type * getFFITypeForCType(
 /*
 ok i've completely lost track of what is what ...
 upvalues:
-#1: funcCTypeUserValueLoc = the function's CType's uservalue[1] ... whatever that is
+#1: ctypeUserValue = the function's CType's uservalue[1] ... whatever that is
 #2: CallInfo userdata
+
+NOTICE the original C function is both in CallInfo->func and in the original userdata<CData + CFunction>
+... however the original userdata<CData> isn't visible from within this function.
 */
-static int callLuaToCWrapper(
+int callLuaToCWithLibFFI(
 	lua_State *L
 ) {						// stack: closure_func, args...
-DEBUGPRINT("callLuaToCWrapper BEGIN, top=%d\n", lua_gettop(L));
+DEBUGPRINT("callLuaToCWithLibFFI BEGIN, top=%d\n", lua_gettop(L));
 	// CData userdata of the function is in upvalue[1]
 	// Does anyone ever use this, both here and in call_*.h ?
 	// In both our cases a lua_CFunction is returned
@@ -153,16 +156,16 @@ DEBUGPRINT("callLuaToCWrapper BEGIN, top=%d\n", lua_gettop(L));
 	// Maybe I can switch call_*.h compile_function() to do the same in order to get the casting C function<->cdata bug fixed?
 
 	// function CType userdata uservalue[1]
-	int funcCTypeUserValueLoc = lua_upvalueindex(2);
+	int ctypeUserValueLoc = lua_upvalueindex(1);
 
 	// get closure arg #3 as the CalInfo that holds the ffi_cif
-	CallInfo * callInfo = (CallInfo*)lua_touserdata(L, lua_upvalueindex(3));
+	CallInfo * callInfo = (CallInfo*)lua_touserdata(L, lua_upvalueindex(2));
 DEBUGPRINT("...callInfo %p\n", callInfo);
 
 	// translate all the Lua args into FFI args
 	assert(callInfo->cif.nargs == callInfo->nargs);
 	for (int i = 1; i <= callInfo->nargs; ++i) {
-		lua_rawgeti(L, funcCTypeUserValueLoc, i);		// stack: closure_func, args..., arg[i]'s CType's userdata = closure_func's upvalue[2]'s [i]
+		lua_rawgeti(L, ctypeUserValueLoc, i);		// stack: closure_func, args..., arg[i]'s CType's userdata = closure_func's upvalue[2]'s [i]
 		const CType * argCType = (const CType*) lua_touserdata(L, -1);
 
 		CallValue * argValue = &callInfo->valueData[i-1];
@@ -305,7 +308,7 @@ for (int i = 0; i < callInfo->nargs; ++i) {
 
 	// TODO translate the Lua result to C result
 	{
-		lua_rawgeti(L, funcCTypeUserValueLoc, 0);		// stack: closure_func, args..., return type's CType's userdata = closure_func's upvalue[2]'s [0]
+		lua_rawgeti(L, ctypeUserValueLoc, 0);		// stack: closure_func, args..., return type's CType's userdata = closure_func's upvalue[2]'s [0]
 		CType const * retCType = (CType const *)lua_touserdata(L, -1);
 
 		// So when creating CData, I'm supposed to get the CType's uservalue1 and forward that on to the CData's uservalue1, right?
@@ -332,7 +335,7 @@ DEBUGPRINT("...pointer %p\n", ret.ptr);
 			switch (retCType->type) {
 			case FUNCTION_PTR_TYPE:
 				{
-					CFunction * p = (CFunction *)push_cdata(L, retCTypeUserValueLoc, retCType);		// stack: typedesc, args..., typedesc's CType's uservalue 1, userdata of CData of CType ct
+					CFunction * p = (CFunction *)push_cdata(L, retCTypeUserValueLoc, retCType);		// stack: typedesc, args..., typedesc's CType's uservalue[1], userdata of CData of CType ct
 					p[0] = callInfo->func;
 DEBUGPRINT("returning func ptr %p into container %p\n", p[0], p);
 				}
@@ -399,36 +402,39 @@ DEBUGPRINT("returning func ptr %p into container %p\n", p[0], p);
 		}
 	}
 
-DEBUGPRINT("callLuaToCWrapper DONE, top=%d returning %d\n\n", lua_gettop(L), nresult);
+DEBUGPRINT("callLuaToCWithLibFFI DONE, top=%d returning %d\n\n", lua_gettop(L), nresult);
 	return nresult;
 }
 
 /*
-funcCTypeUserValueLoc = index of the function's ctype's uservalue 1
+funcCTypeUserValueLoc = index of the function's ctype's uservalue[1]
 */
 void compile_function(
 	lua_State * L,
 	CFunction func,
-	int funcCTypeUserValueLoc,					// userdata of CType's uservalue 1 ... what are these used for again?  "usr" for the uservalue doesn't lend much of an explanation ...
-	const CType * ct
+	int funcCTypeUserValueLoc,					// userdata of CType's uservalue[1] ... what are these used for again?  "usr" for the uservalue doesn't lend much of an explanation ...
+	const CType * ctype
 ) {								// stack: ...
 DEBUGPRINT("compile_function() BEGIN func=%p\n", func);
 
-	//int top = lua_gettop(L);
+	int top = lua_gettop(L);
 	funcCTypeUserValueLoc = lua_absindex(L, funcCTypeUserValueLoc);
 
-	if (ct->calling_convention != C_CALL && ct->has_var_arg) {
+	// TODO varag, because libffi handles it.
+	if (ctype->calling_convention != C_CALL && ctype->has_var_arg) {
 		luaL_error(L, "vararg is only allowed with the c calling convention");
 	}
 
-	// TODO who even uses this anyways?
-	void * p = push_cdata(L, funcCTypeUserValueLoc, ct);	// stack: ..., p = CData userdata for type ct
-	*(CFunction *)p = func;
+	/*
+	push_cdata() sets cdata's uservalue[1] to CType's uservalue[1]
+	*/
+	CFunction * cdata = push_cdata(L, funcCTypeUserValueLoc, ctype);	// stack: ..., cdata = CData userdata for type ctype, which should be a function
+	cdata[0] = func;
 
 	// fill out types
 	size_t nargs = lua_rawlen(L, funcCTypeUserValueLoc);
 
-	lua_pushvalue(L, funcCTypeUserValueLoc);					// stack: ..., p, stack[funcCTypeUserValueLoc],
+	lua_pushvalue(L, funcCTypeUserValueLoc);					// stack: ..., cdata, ctypeUserVal = stack[funcCTypeUserValueLoc]
 
 	// make one giant allocation so I don't have to worry about my own __gc to free up stuff, because there seems to be exit race conditions where CallInfo's get freed and then their function called,which has a bad CallInfo ...
 	size_t callInfoBufSize =
@@ -436,7 +442,7 @@ DEBUGPRINT("compile_function() BEGIN func=%p\n", func);
 		+ sizeof(ffi_type*) * nargs	//  argType
 		+ sizeof(CallValue) * nargs	// valueData
 		+ sizeof(void*) * nargs;	// valuePtrs
-	CallInfo * callInfo = (CallInfo*)lua_newuserdata(L, callInfoBufSize);	// stack: ..., p, stack[funcCTypeUserValueLoc], CallInfo
+	CallInfo * callInfo = (CallInfo*)lua_newuserdata(L, callInfoBufSize);	// stack: ..., cdata, ctypeUserVal, callInfo = userdata of CallInfo
 DEBUGPRINT("...callInfo %p\n", callInfo);
 	memset(callInfo, 0, callInfoBufSize);
 	{
@@ -451,14 +457,15 @@ DEBUGPRINT("...callInfo %p\n", callInfo);
 		p += nargs * sizeof(void*);
 		assert(p == (uint8_t*)callInfo+callInfoBufSize);
 	}
+
 	/*
-	Does this mean a function's CType userdata's uservalue 1 is a table of:
+	Does this mean a function's CType userdata's uservalue[1] is a table of:
 	[0] = userdata of the CType of the return type
 	[i] = userdata of the CType of the i'th arg type, for i>0
 	*/
 	for (int i = 1; i <= nargs; i++) {
 		callInfo->valuePtrs[i-1] = &callInfo->valueData[i-1];
-		lua_rawgeti(L, funcCTypeUserValueLoc, i);
+		lua_rawgeti(L, funcCTypeUserValueLoc, i);						// stack: ..., cdata, ctypeUserVal, callInfo, ctypeUserVal[i]
 		CType const * argCType = (CType const *)lua_touserdata(L, -1);
 		callInfo->argTypes[i-1] = getFFITypeForCType(L, argCType);
 #if defined(DEBUG_LOG)
@@ -468,10 +475,10 @@ push_type_name(L, -1, argCType);
 DEBUGPRINT("args[%d] setting luaffi-type-name=%s libffi-type-ptr=%p libffi-type=%d\n", i, lua_tostring(L, -1), callInfo->argTypes[i-1], callInfo->argTypes[i-1]->type);
 lua_pop(L, 2);	// typename string & arg's ctype's userdata's uservalue
 #endif
-		lua_pop(L, 1);
+		lua_pop(L, 1);													// stack: ..., cdata, ctypeUserVal, callInfo
 	}
 
-	lua_rawgeti(L, funcCTypeUserValueLoc, 0);
+	lua_rawgeti(L, funcCTypeUserValueLoc, 0);							// stack: ..., cdata, ctypeUserVal, callInfo, ctypeUserVal[0]
 	CType const * retCType = (CType const *)lua_touserdata(L, -1);
 	callInfo->retType = getFFITypeForCType(L, retCType);
 #if defined(DEBUG_LOG)
@@ -481,7 +488,7 @@ push_type_name(L, -1, retCType);
 DEBUGPRINT("return luaffi-type-name=%s libffi-type-ptr=%p libffi-type=%d\n", lua_tostring(L, -1), callInfo->retType, callInfo->retType->type);
 lua_pop(L, 2);	// typename string & arg's ctype's userdata's uservalue
 #endif
-	lua_pop(L, 1);
+	lua_pop(L, 1);													// stack: ..., cdata, ctypeUserVal, callInfo
 
 	// TODO
 	// https://www.chiark.greenend.org.uk/doc/libffi-dev/html/The-Basics.html
@@ -498,28 +505,43 @@ lua_pop(L, 2);	// typename string & arg's ctype's userdata's uservalue
 	So it just executes like any other function would
 	*/
 
-	lua_pushcclosure(L, callLuaToCWrapper, 3);	// stack: ..., callLuaToCWrapper with closure of {p, stack[funcCTypeUserValueLoc], CallInfo}
-DEBUGPRINT("compile_function() DONE\n\n");
+	lua_pushvalue(L, -2);
+	lua_pushvalue(L, -2);
+	lua_pushcclosure(L, callLuaToCWithLibFFI, 2);	// stack: ..., cdata, ctypeUserVal, callInfo, callLuaToCWithLibFFI;  ... with upvalues of {ctypeUserVal, callInfo}
 
-
+#if 1
 	/*
 	So it looks like in the call_x64.h compile_function() does push a CData<CFunction> userdata onto the stack and just toss it,
 	because then it pushes the lua_CFunction of the closure onto the stack, 
 	and any calls just goes to that lua_CFunction, and that's what we use from then on out.
 	Nobody sees the CData again, only the lua_CFunction, and that's why you cannot cast a dlsym'd function to void* or other CData-pointers. (A feature missing that's in original LuaJIT)
-	
+
 	Then there's call_x64.h's compile_callback(), and that does seem to push and leave the CData on the stack.
 	And then that CData's call behind-the-scenes uservalue[]'s are specified in the `cdata_call` function in ffi.c
-	
-
 	*/
 
+	lua_remove(L, -2);								// stack: ..., cdata, ctypeUserVal, callLuaToCWithLibFFI ... removed callInfo 
+// TODO WHERE TO STORE THIS.
+// cdata's uservalue[1] [cdata] , for C function-ptrs this holds the closure function.
+// IS ANYTHING ELSE USING THIS?
+{// lets check
+	lua_pushvalue(L, -3);							// stack: ..., cdata, ctypeUserVal, callLuaToCWithLibFFI, cdata
+	lua_rawget(L, -3);								// stack: ..., cdata, ctypeUserVal, callLuaToCWithLibFFI, ctypeUserVal[cdata]
+	assert(lua_type(L, -1) == LUA_TNIL || lua_tocfunction(L, -1) == callLuaToCWithLibFFI);
+	lua_pop(L, 1);									// stack: ..., cdata, ctypeUserVal, callLuaToCWithLibFFI
 }
 
-static int callCToLuaWrapper(
-) {
-	return 0;
+	lua_pushvalue(L, -3);							// stack: ..., cdata, ctypeUserVal, callLuaToCWithLibFFI, cdata
+	lua_insert(L, -2);								// stack: ..., cdata, ctypeUserVal, cdata, callLuaToCWithLibFFI
+	lua_rawset(L, -3);								// stack: ..., cdata, ctypeUserVal;  ctypeUserVal[cdata] = callLuaToCWithLibFFI
+	lua_pop(L, 1);									// stack: ..., cdata
+	assert(lua_gettop(L) == top + 1);
+#endif
+
+DEBUGPRINT("compile_function() DONE\n\n");
 }
+
+
 
 
 /* 

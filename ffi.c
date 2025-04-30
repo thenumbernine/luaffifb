@@ -71,17 +71,19 @@ Leaves the stack.
 	lua_setfield(L, _tableLoc, key);			/* stack: ...;  stack[tableLoc][key] = value */\
 }
 
+// TODO just implement lua_rawgetp / lua_rawsetp
+
 // Pushes registry[key]
-// why int* and not void* ?
 void pushRegistry(lua_State* L, void * key) {
 	lua_pushlightuserdata(L, key);		// stack: key
 	lua_rawget(L, LUA_REGISTRYINDEX);	// stack: registry[key]
 }
 
 // Pops the top value from the stack and assigns it to registry[key]
-// why int* and not void* ?
-void setRegistry(lua_State* L, void * key) {
-										// stack: ..., value
+void setRegistry(
+	lua_State * L,
+	void * key
+) {										// stack: ..., value
 	lua_pushlightuserdata(L, key);		// stack: ..., value, key
 	lua_insert(L, -2);					// stack: ..., key, value
 	lua_rawset(L, LUA_REGISTRYINDEX);	// stack: ...;  registry[key] = value
@@ -90,8 +92,11 @@ void setRegistry(lua_State* L, void * key) {
 
 // Returns whether the stack at idx is equal to registry[key]
 // Leaves the stack the same.
-int equalsRegistry(lua_State* L, int idx, void * key)
-{										// stack: ...
+int equalsRegistry(
+	lua_State * L,
+	int idx,
+	void * key
+) {										// stack: ...
 	lua_pushvalue(L, idx);				// stack: ..., stack[idx]
 	pushRegistry(L, key);				// stack: ..., stack[idx], registry[key]
 	int ret = lua_rawequal(L, -2, -1);	// stack: ..., stack[idx], registry[key]
@@ -1266,7 +1271,7 @@ static int do_new(
 	int check_ptrs = !is_cast;
 
 	CType ct;
-	check_ctype(L, 1, &ct);							// stack: typedesc, args..., typedesc's CType's uservalue 1
+	check_ctype(L, 1, &ct);							// stack: typedesc, args..., typedesc's CType's uservalue[1]
 
 	// don't push a callback when we have a c function, as cb:set needs a
 	// compiled callback from a lua function to work
@@ -1276,8 +1281,8 @@ static int do_new(
 	) {
 		// Get the bound C function if this is a ffi lua function
 		CFunction func;
-		if (get_cfunction_address(L, 2, &func)) {	// stack: typedesc, args..., typedesc's CType's uservalue 1
-			void * p = push_cdata(L, -1, &ct);		// stack: typedesc, args..., typedesc's CType's uservalue 1, userdata of CData of CType ct
+		if (get_cfunction_address(L, 2, &func)) {	// stack: typedesc, args..., typedesc's CType's uservalue[1]
+			void * p = push_cdata(L, -1, &ct);		// stack: typedesc, args..., typedesc's CType's uservalue[1], userdata of CData of CType ct
 			*(CFunction *)p = func;
 			return 1;
 		}
@@ -1292,16 +1297,16 @@ static int do_new(
 		return 1;
 	}
 
-	// stack: typedesc, args..., typedesc's CType's uservalue 1
+	// stack: typedesc, args..., typedesc's CType's uservalue[1]
 
 	// this removes the vararg argument if its needed, and errors if its invalid
 	if (!is_cast) {
 		get_variable_array_size(L, 2, &ct);
 	}
 
-	// stack: typedesc, args..., typedesc's CType's uservalue 1
+	// stack: typedesc, args..., typedesc's CType's uservalue[1]
 
-	void * p = push_cdata(L, -1, &ct);		// stack: typedesc, args..., typedesc's CType's uservalue 1, CData userdata with uservalue 1 set to ct CType's userdata's uservalue 1
+	void * p = push_cdata(L, -1, &ct);		// stack: typedesc, args..., typedesc's CType's uservalue[1], CData userdata with uservalue[1] set to ct CType's userdata's uservalue[1]
 
 	// if the user mt has a __gc function then call ffi.gc on this value
 	if (push_user_mt(L, -2, &ct)) {
@@ -1531,22 +1536,9 @@ static int cdata_set(lua_State* L)
 }
 
 /*
-TODO WHO ACTUALLY CALLS THIS?!??!?!??!?
-- cmodule C functions don't, they wrap in lua_CFunction/lua-function closures, and are not objects.
-- callbacks don't either ... how does that work anyways? compile_callback() in call_x64.h pushes a CData on the stack, so how come calling it doesn't trigger this?
-I guess that only leaves cdata with metatables with __call field defined.
-AND YES, CData mt.__call DOES CALL HERE ... and handles the first condition ... and returns.
-SO WHAT IS ALL THE SUBSEUQNT FUNCTION_PTR_TYPE STUFF FOR?!?!?!
-YES, VERIFIED, functoin pointers from C do get past the FUNCTION_PTR_TYPE condition below..
-That means "FUNCTION_PTR_TYPE" is only for function-pointers returned from C.
-
-Maybe it's for function-ptrs returned from C functions?
-
-
 This function is only for:
 - CData with __call metamethods
 - C function-ptrs retrieved from C API
-
 Everything else is handled elsewhere.
 
 stack[1] is CData
@@ -1554,12 +1546,13 @@ stack[1] is CData
 static int cdata_call(
 	lua_State * L
 ) {									// stack: obj, ...
-printf("cdata_call top=%d\n", lua_gettop(L));	
 	int top = lua_gettop(L);
 	CType ct;
-	CFunction * p = (CFunction *)check_cdata(L, 1, &ct);	// stack: obj, ..., obj_uv = obj's CData's uservalue 1
+	CFunction * p = (CFunction *)check_cdata(L, 1, &ct);	// stack: obj, ..., objUserVal = obj's uservalue[1]
 
 	if (push_user_mt(L, -1, &ct)) {
+		// handle CData __call metamethods:
+
 		lua_pushliteral(L, "__call");
 		lua_rawget(L, -2);
 
@@ -1569,34 +1562,43 @@ printf("cdata_call top=%d\n", lua_gettop(L));
 			lua_call(L, lua_gettop(L) - 1, LUA_MULTRET);
 			return lua_gettop(L);
 		}
-	}	// stack: obj, ..., obj_uv
+	}	// stack: obj, ..., objUserVal
 
 	if (ct.pointers || ct.type != FUNCTION_PTR_TYPE) {
+#if defined(CALL_WITH_LIBFFI)
+		// This could now be a libffi call object...
+		lua_pushvalue(L, 1);			// stack: obj, ..., objUserVal, obj
+		lua_rawget(L, -2);				// stack: obj, ..., objUserVal, closure = objUserValue[obj]
+		if (lua_tocfunction(L, -1) == callLuaToCWithLibFFI) {
+			lua_remove(L, -2);			// stack: obj, ..., closure = objUserValue[obj]
+			lua_replace(L, 1);			// stack: closure, ...
+			lua_call(L, lua_gettop(L) - 1, LUA_MULTRET);	// stack: closure(...)'s results...
+			return lua_gettop(L);
+		}
+		assert(lua_type(L, -1) == LUA_TNIL);	//right? who else is using this?
+#endif	//CALL_WITH_LIBFFI
+
 		return luaL_error(L, "only function callbacks are callable");
 	}
+	
+	// handle C function-ptrs:
 
-	lua_pushvalue(L, 1);					// stack: obj, ..., obj_uv, obj
-	lua_rawget(L, lua_upvalueindex(1));		// stack: obj, ..., obj_uv, closure = obj_uv[obj]
-printf("cdata_call uservalue is same? %d\n", lua_rawequal(L, -1, -2));
-	// Why use rawget(upvalueindex(1)) when the upvalueindex(1) is already on the stack from check_cdata ?
-	// Does this mean a CData of a module C function has uservalue 1 = a table which,
-	//  for key of that CData userdata, the value is the lua_CFunction to call?
-	// Does it also assert (courtesy of this and do_new) that a CData's userdata's uservalue[1] = the CData's CType's userdata's uservalue[1] ?
-	// If the "closure" lua_CFunction associated with this CData-function is not present then generate it with compile_function()
-	if (!lua_isfunction(L, -1)) {
-		lua_pop(L, 1);						// stack: obj, ..., obj_uv
-		compile_function(L, *p, -1, &ct);	// stack: obj, ..., obj_uv, the lua_CFunction returned by compile_function that the comments call the "closure"
+	lua_pushvalue(L, 1);					// stack: obj, ..., objUserVal, obj
+	lua_rawget(L, lua_upvalueindex(1));		// stack: obj, ..., objUserVal, objUpVal = obj's upvalue[1] = function-closure in some cases? idk when ... whenever a lua-function invokes a __call method, which is never.
+	if (!lua_isfunction(L, -1)) {			// if obj's upvalue[1] is not a lua-function ...
+		lua_pop(L, 1);						// stack: obj, ..., objUserVal
+		compile_function(L, *p, -1, &ct);	// stack: obj, ..., objUserVal, closure = the lua_CFunction returned by compile_function
 
-		assert(lua_gettop(L) == top + 2); 	// stack: obj, ..., obj_uv, closure
+		assert(lua_gettop(L) == top + 2); 	// stack: obj, ..., objUserVal, closure
 
 		// closures[func] = closure
-		lua_pushvalue(L, 1);				// stack: obj, ..., obj_uv, closure, obj
-		lua_pushvalue(L, -2);				// stack: obj, ..., obj_uv, closure, obj, closure
-		lua_rawset(L, lua_upvalueindex(1));	// stack: obj, ..., obj_uv, closure;  obj_uv[obj] = closure
+		lua_pushvalue(L, 1);				// stack: obj, ..., objUserVal, closure, obj
+		lua_pushvalue(L, -2);				// stack: obj, ..., objUserVal, closure, obj, closure
+		lua_rawset(L, lua_upvalueindex(1));	// stack: obj, ..., objUserVal, closure;  objUserVal[obj] = closure
 
-		lua_replace(L, 1);					// stack: closure, ..., obj_uv
+		lua_replace(L, 1);					// stack: closure, ..., objUserVal
 	} else {
-		lua_replace(L, 1);					// stack: closure, ..., obj_uv
+		lua_replace(L, 1);					// stack: closure, ..., objUserVal
 	}
 
 	lua_pop(L, 1);							// stack: closure, ...
@@ -2778,7 +2780,7 @@ static int ffi_type(lua_State* L) {		// stack: x, ...
 static int ffi_number(lua_State* L) {
 														// stack: x, ...
 	CType ct;
-	void * data = to_cdata(L, 1, &ct);					// stack: x, ..., x's uservalue 1 or nil
+	void * data = to_cdata(L, 1, &ct);					// stack: x, ..., x's uservalue[1] or nil
 
 	// not cdata <=> handle default case
 	if (ct.type == INVALID_TYPE) {
@@ -2801,17 +2803,17 @@ static int ffi_number(lua_State* L) {
 		|| ct.is_variable_array				// I think this is only set if is_array is set ... if so this test can be removed.
 		|| ct.pointers
 	) {
-		lua_pushnil(L);									// stack: x, ..., x's uservalue 1, nil
+		lua_pushnil(L);									// stack: x, ..., x's uservalue[1], nil
 		return 1;
 	}
 
 	if (ct.type == FLOAT_TYPE || ct.type == COMPLEX_FLOAT_TYPE) {
-		lua_pushnumber(L, *(float*)data);				// stack: x, ..., x's uservalue 1, *(float*)data
+		lua_pushnumber(L, *(float*)data);				// stack: x, ..., x's uservalue[1], *(float*)data
 		return 1;
 	}
 
 	if (ct.type == DOUBLE_TYPE || ct.type == COMPLEX_DOUBLE_TYPE) {
-		lua_pushnumber(L, *(double*)data);				// stack: x, ..., x's uservalue 1, *(double*)data
+		lua_pushnumber(L, *(double*)data);				// stack: x, ..., x's uservalue[1], *(double*)data
 		return 1;
 	}
 
@@ -2994,7 +2996,7 @@ static void * lookup_global(
 
 	// leave just the ct_usr on the stack
 	*ct = *(const CType*)lua_touserdata(L, -1);
-	lua_getuservalue(L, -1);			// stack: ..., registry[&functions_key], ct, uv = ct uservalue 1
+	lua_getuservalue(L, -1);			// stack: ..., registry[&functions_key], ct, uv = ct uservalue[1]
 	lua_replace(L, top + 1);			// stack: ..., uv, ct
 	lua_pop(L, 1);						// stack: ..., uv
 
@@ -3018,7 +3020,7 @@ static void * lookup_global(
 /*
 indexing a module (i.e. ffi.C, ffi.load(libname), etc)
 checks in:
-- module uservalue 1 [key]
+- module uservalue[1][key]
 - registry[&constants_key][key]
 */
 static int cmodule_index(
@@ -3027,11 +3029,11 @@ static int cmodule_index(
 	lua_settop(L, 2);
 
 	// see if we have already saved the function from our last time around in the compile_function() block down below
-	lua_getuservalue(L, 1);	// stack: module, key, ..., module_uv = module uservalue 1
+	lua_getuservalue(L, 1);	// stack: module, key, ..., module_uv = module uservalue[1]
 	lua_pushvalue(L, 2);	// stack: module, key, ..., module_uv, key
 	lua_rawget(L, -2);		// stack: module, key, ..., module_uv, module_uv[key]
 	if (!lua_isnil(L, -1)) {
-		// ... so module[key]'s function cdata is stored in module uservalue 1 [key] ?
+		// ... so module[key]'s function cdata is stored in module uservalue[1] [key] ?
 		// why not just in ... module[key] ?
 		return 1;
 	}
@@ -3049,7 +3051,7 @@ static int cmodule_index(
 	// lookup_global pushes the ct_usr
 	const char* asmname;
 	CType ct;
-	void * sym = lookup_global(L, 1, 2, &asmname, &ct);		// stack: module, key, ..., ct_usr = global[name]'s ctype's uservalue 1 ...
+	void * sym = lookup_global(L, 1, 2, &asmname, &ct);		// stack: module, key, ..., ct_usr = global[name]'s ctype's uservalue[1] ...
 
 #if defined _WIN32 && !defined _WIN64 && (defined __i386__ || defined _M_IX86)
 	if (!sym && ct.type == FUNCTION_TYPE) {
@@ -3079,7 +3081,7 @@ static int cmodule_index(
 		assert(lua_gettop(L) == 4);
 
 		// Set module_uv[key] = closure_lua_CFunction
-		lua_getuservalue(L, 1);			// stack: module, key, ct_usr, closure_lua_CFunction, module_uv = module uservalue 1
+		lua_getuservalue(L, 1);			// stack: module, key, ct_usr, closure_lua_CFunction, module_uv = module uservalue[1]
 		lua_pushvalue(L, 2);			// stack: module, key, ct_usr, closure_lua_CFunction, module_uv, key
 		lua_pushvalue(L, -3);			// stack: module, key, ct_usr, closure_lua_CFunction, module_uv, key, closure_lua_CFunction
 		lua_rawset(L, -3);				// stack: module, key, ct_usr, closure_lua_CFunction, module_uv;  module_uv[key] = closure_lua_CFunction
@@ -3406,11 +3408,11 @@ static void add_typedef(
 
 	pushRegistry(L, &types_key);				// stack: ..., registry[&types_key]
 	CType ct;
-	parse_type(L, &P, &ct);						// stack: ..., registry[&types_key], ctype uservalue 1
-	parse_argument(L, &P, -1, &ct, NULL, NULL);	// stack: ..., registry[&types_key], ctype uservalue 1, arg??? uservalue 1
-	push_ctype(L, -1, &ct);						// stack: ..., registry[&types_key], ctype uservalue 1, arg uservalue 1, userdata copy of ct
+	parse_type(L, &P, &ct);						// stack: ..., registry[&types_key], ctype uservalue[1]
+	parse_argument(L, &P, -1, &ct, NULL, NULL);	// stack: ..., registry[&types_key], ctype uservalue[1], arg??? uservalue[1]
+	push_ctype(L, -1, &ct);						// stack: ..., registry[&types_key], ctype uservalue[1], arg uservalue[1], userdata copy of ct
 
-	lua_setfield(L, -4, to);					// stack: ..., registry[&types_key], ctype uservalue 1, arg uservalue 1;  registry[&types_key][to] = userdata copy of ct
+	lua_setfield(L, -4, to);					// stack: ..., registry[&types_key], ctype uservalue[1], arg uservalue[1];  registry[&types_key][to] = userdata copy of ct
 	lua_pop(L, 3);								// stack: ...
 }
 
@@ -3486,7 +3488,7 @@ static int ffiInit(lua_State* L) {
 
 											// stack: ffi, libs userdata of void*[]
 		lua_newtable(L);					// stack: ffi, libs, t={}
-		lua_setuservalue(L, -2);			// stack: ffi, libs;  set libs uservalue 1 to t
+		lua_setuservalue(L, -2);			// stack: ffi, libs;  set libs uservalue[1] to t
 
 		pushRegistry(L, &cmodule_mt_key);	// stack: ffi, libs, registry[&cmodule_mt_key]
 		lua_setmetatable(L, -2);			// stack: ffi, libs;  setmetatable(libs, registry[&cmodule_mt_key])
