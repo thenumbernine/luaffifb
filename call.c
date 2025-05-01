@@ -560,10 +560,12 @@ CFunction compile_callback(
 	// or maybe callbacks should be a different type from FUNCTION_TYPE and maybe FUNCTION_PTR_TYPE shouldn't be different from FUNCTION_TYPE ...
 	// or worse: HOW CAN C KNOW WHAT TO CALL?!
 	// TODO for this to work, we need a wasm-friendly way to make a wholly new C function and push the pointer here.
-	luaL_error(L, "TODO callback");
+	//luaL_error(L, "TODO callback");
+fprintf(stderr, "!!!DANGER!!! Callbacks are not implemented, passing a null function, let's hope nobody calls it!\n");	
+	pf[0] = NULL;
 	//pf[0] = callCToLuaWithLibFFI;	// compile function ... which converts the C->Lua args, calls, and converts Lua->C return type.
 									// now how do I save extra data for the conversion to handle?  the old luaffifb way was to make a wholly new function ...
-
+#if 0
 	// Maybe I'll just do like I see everywhere else and cross my fingers:
 	// That is: set the CType's userdata's uservalue[1]'s table entry with this new data as the key!
 
@@ -574,7 +576,7 @@ CFunction compile_callback(
 	lua_pushvalue(L, -2);						// stack: ..., cdata, callCToLuaWithLibFFI, cdata
 	lua_insert(L, -2);							// stack: ..., cdata, cdata, callCToLuaWithLibFFI
 	lua_rawset(L, funcCTypeUserValueLoc);			// stack: ..., cdata;  uv[cdata] = callCToLuaWithLibFFI
-
+#endif
 	return *pf;
 }
 
