@@ -1276,8 +1276,6 @@ static int do_new(
 	lua_State * L,
 	int is_cast
 ) {													// stack: typedesc, args...
-	int check_ptrs = !is_cast;	// does is_cast change or something, or ... nevermind ... smh ...
-
 	CType ct;
 	check_ctype(L, 1, &ct);							// stack: typedesc, args..., typedesc's CType's uservalue[1]
 
@@ -1355,11 +1353,11 @@ static int do_new(
 			lua_rawseti(L, 1, i);
 		}
 		assert(lua_gettop(L) == cargs + 3);
-		set_value(L, 1, p, -2, &ct, check_ptrs);
+		set_value(L, 1, p, -2, &ct, !is_cast);	// cast <-> don't check pointers
 		return 1;
 	}
 
-	set_value(L, 2, p, -2, &ct, check_ptrs);
+	set_value(L, 2, p, -2, &ct, !is_cast);	// cast <-> don't check pointers
 	return 1;
 }
 

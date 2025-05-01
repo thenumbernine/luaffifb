@@ -72,17 +72,14 @@ print('in Lua, test_vp = ', lib.test_vp)
 local vp2 = lib.test_vfp_vfp(lib.test_vp)
 print('in Lua, test_vfp_vfp(test_vp) = ', vp2)	-- TODO this has tostring() that is off by a bit ...
 --print('calling the callback to see if it still works...')
---vp2()	-- TODO this is calling twice ...
-print('is the passed-thru callback equal the original?', lib.test_vp == lib.test_vfp_vfp(lib.test_vp))
-os.exit()
+vp2()	-- TODO this is calling twice ...
+assert.eq(lib.test_vp, lib.test_vfp_vfp(lib.test_vp), 'is the passed-thru callback equal the original?')
 
 -- works
 local vp_test_vp = ffi.cast('void*', lib.test_vp)
 print('(void*)test_vp = ', vp_test_vp)
 assert.eq(lib.test_vp, vp_test_vp, 'is test_vp == (void*)test_vp?')
 
-
-os.exit()
 
 do --for rep=1,5 do
 --print('!!!!!!!! BEGINNING REPEAT '..rep..' !!!!!!!!')

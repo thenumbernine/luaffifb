@@ -305,7 +305,7 @@ void * to_cdata(
 }
 
 /*
-pushes the CData's userdata's uservalue[1] onto the stack
+Pushes the CData's userdata's uservalue[1] onto the stack
 returns the CData*
 */
 void * check_cdata(
