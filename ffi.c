@@ -1593,7 +1593,7 @@ static int cdata_call(
 	// Handle C function-ptrs:
 #if defined(CALL_WITH_LIBFFI)
 	// now compile_function returns a CData so I gotta work around that
-	
+
 	lua_pushvalue(L, 1);					// stack: obj, ..., objUserVal, obj
 	lua_rawget(L, lua_upvalueindex(1));		// stack: obj, ..., objUserVal, objUpVal = obj's upvalue[1] = function-closure
 	if (!lua_isfunction(L, -1)) {			// if obj's upvalue[1] is not a lua-function ...
@@ -1611,7 +1611,7 @@ static int cdata_call(
 
 
 #else	// The old way:
-	
+
 	lua_pushvalue(L, 1);					// stack: obj, ..., objUserVal, obj
 	lua_rawget(L, lua_upvalueindex(1));		// stack: obj, ..., objUserVal, objUpVal = obj's upvalue[1] = function-closure in some cases? idk when ... whenever a lua-function invokes a __call method, which is never.
 	if (!lua_isfunction(L, -1)) {			// if obj's upvalue[1] is not a lua-function ...
@@ -1631,7 +1631,7 @@ static int cdata_call(
 	}
 
 	lua_pop(L, 1);							// stack: closure, ...
-#endif	
+#endif
 	assert(lua_gettop(L) == top);
 
 	lua_call(L, lua_gettop(L) - 1, LUA_MULTRET);	// stack: closure(...)'s results...
@@ -2535,8 +2535,8 @@ static int cdata_eq(lua_State* L)
 	    int64_t right = check_intptr(L, 2, rp, &rt);
 
 		// Chris: what a mess.  putting this here for now. Don't care about false-positives
-		if (lt.type == FUNCTION_TYPE 
-			|| lt.type == FUNCTION_PTR_TYPE 
+		if (lt.type == FUNCTION_TYPE
+			|| lt.type == FUNCTION_PTR_TYPE
 			|| rt.type == FUNCTION_TYPE
 			|| rt.type == FUNCTION_PTR_TYPE
 		) {
@@ -2624,8 +2624,8 @@ static int cdata_lt(lua_State* L)
 	    int64_t right = check_intptr(L, 2, rp, &rt);
 
 		// Chris: what a mess.  putting this here for now. Don't care about false-positives
-		if (lt.type == FUNCTION_TYPE 
-			|| lt.type == FUNCTION_PTR_TYPE 
+		if (lt.type == FUNCTION_TYPE
+			|| lt.type == FUNCTION_PTR_TYPE
 			|| rt.type == FUNCTION_TYPE
 			|| rt.type == FUNCTION_PTR_TYPE
 		) {
@@ -2717,8 +2717,8 @@ static int cdata_le(lua_State* L)
 	    int64_t right = check_intptr(L, 2, rp, &rt);
 
 		// Chris: what a mess.  putting this here for now. Don't care about false-positives
-		if (lt.type == FUNCTION_TYPE 
-			|| lt.type == FUNCTION_PTR_TYPE 
+		if (lt.type == FUNCTION_TYPE
+			|| lt.type == FUNCTION_PTR_TYPE
 			|| rt.type == FUNCTION_TYPE
 			|| rt.type == FUNCTION_PTR_TYPE
 		) {
@@ -3477,6 +3477,108 @@ static int ffi_u64(lua_State* L) {
 	return do64(L, 1);
 }
 
+#if 1
+//how big is the main stack?
+// same as lua_gettop(L) outside of any function ...
+// but how to access that when all we are doing here is providing Lua functions etc to call?
+#include <signal.h>
+#define l_signalT	sig_atomic_t
+typedef unsigned char lu_byte;
+typedef signed char ls_byte;
+typedef struct global_State global_State;
+#if LUAI_IS32INT
+typedef unsigned int l_uint32;
+#else
+typedef unsigned long l_uint32;
+#endif
+typedef l_uint32 Instruction;
+typedef struct UpVal UpVal;
+typedef struct GCObject GCObject;
+typedef struct lua_longjmp lua_longjmp;
+typedef union Value {
+  struct GCObject *gc;    /* collectable objects */
+  void *p;         /* light userdata */
+  lua_CFunction f; /* light C functions */
+  lua_Integer i;   /* integer numbers */
+  lua_Number n;    /* float numbers */
+  /* not used, but may avoid warnings for uninitialized value */
+  lu_byte ub;
+} Value;
+typedef struct TValue {
+  Value value_; lu_byte tt_;
+} TValue;
+typedef union StackValue {
+  TValue val;
+  struct {
+    Value value_; lu_byte tt_;
+    unsigned short delta;
+  } tbclist;
+} StackValue;
+typedef StackValue *StkId;
+typedef union {
+  StkId p;  /* actual pointer */
+  ptrdiff_t offset;  /* used while the stack is being reallocated */
+} StkIdRel;
+typedef struct CallInfo {
+  StkIdRel func;  /* function index in the stack */
+  StkIdRel	top;  /* top for this function */
+  struct CallInfo *previous, *next;  /* dynamic call link */
+  union {
+    struct {  /* only for Lua functions */
+      const Instruction *savedpc;
+      volatile l_signalT trap;  /* function is tracing lines/counts */
+      int nextraargs;  /* # of extra arguments in vararg functions */
+    } l;
+    struct {  /* only for C functions */
+      lua_KFunction k;  /* continuation in case of yields */
+      ptrdiff_t old_errfunc;
+      lua_KContext ctx;  /* context info. in case of yields */
+    } c;
+  } u;
+  union {
+    int funcidx;  /* called-function index */
+    int nyield;  /* number of values yielded */
+    int nres;  /* number of values returned */
+    struct {  /* info about transferred values (for call/return hooks) */
+      unsigned short ftransfer;  /* offset of first value transferred */
+      unsigned short ntransfer;  /* number of values transferred */
+    } transferinfo;
+  } u2;
+  short nresults;  /* expected number of results from this function */
+  unsigned short callstatus;
+} CallInfo;
+struct lua_State {
+  struct GCObject *next; lu_byte tt; lu_byte marked;
+  lu_byte status;
+  lu_byte allowhook;
+  unsigned short nci;  /* number of items in 'ci' list */
+  StkIdRel top;  /* first free slot in the stack */
+  global_State *l_G;
+  CallInfo *ci;  /* call info for current function */
+  StkIdRel stack_last;  /* end of stack (last element + 1) */
+  StkIdRel stack;  /* stack base */
+  UpVal *openupval;  /* list of open upvalues in this stack */
+  StkIdRel tbclist;  /* list of to-be-closed variables */
+  GCObject *gclist;
+  struct lua_State *twups;  /* list of threads with open upvalues */
+  struct lua_longjmp *errorJmp;  /* current error recover point */
+  CallInfo base_ci;  /* CallInfo for first level (C calling Lua) */
+  volatile lua_Hook hook;
+  ptrdiff_t errfunc;  /* current error handling function (stack index) */
+  l_uint32 nCcalls;  /* number of nested (non-yieldable | C)  calls */
+  int oldpc;  /* last pc traced */
+  int basehookcount;
+  int hookcount;
+  volatile l_signalT hookmask;
+};
+static int ffi_stack(lua_State * L) {
+	lua_pushinteger(L, L->top.p - L->stack.p);
+	return 1;
+}
+#else
+static int ffi_stack(lua_State * L) { lua_gettop(L); return 1; }	// lol always 0
+#endif
+
 static const luaL_Reg cdata_mt[] = {
 	{"__gc", cdata_gc},
 	{"__call", cdata_call},
@@ -3534,25 +3636,34 @@ static const luaL_Reg jit_mt[] = {
 };
 
 static const luaL_Reg ffi_reg[] = {
-	{"cdef", ffi_cdef},
-	{"load", ffi_load},
-	{"new", ffi_new},
+	// Original LuaJIT:
+	{"string", ffi_string},
+	{"gc", ffi_gc},
+	{"metatype", ffi_metatype},
+	{"abi", ffi_abi},
+	{"fill", ffi_fill},
+	{"copy", ffi_copy},
+	{"errno", ffi_errno},
+	{"offsetof", ffi_offsetof},
+	{"alignof", ffi_alignof},
+	{"istype", ffi_istype},
 	{"typeof", ffi_typeof},
 	{"cast", ffi_cast},
-	{"metatype", ffi_metatype},
-	{"gc", ffi_gc},
+	{"new", ffi_new},
+	{"cdef", ffi_cdef},
 	{"sizeof", ffi_sizeof},
-	{"alignof", ffi_alignof},
-	{"offsetof", ffi_offsetof},
-	{"istype", ffi_istype},
-	{"errno", ffi_errno},
-	{"string", ffi_string},
-	{"copy", ffi_copy},
-	{"fill", ffi_fill},
-	{"abi", ffi_abi},
+	{"load", ffi_load},
+	//Original defined elsewhere: C arch os
+	//Originals missing: typeinfo
+
+	// Extra to LuaFFIFB:
 	{"debug", ffi_debug},
 	{"i64", ffi_i64},
 	{"u64", ffi_u64},
+
+	// Chris' debugging:
+	{"stack", ffi_stack},
+
 	{NULL, NULL}
 };
 

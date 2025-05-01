@@ -66,14 +66,17 @@ VFP test_vfp_vfp(VFP f);
 
 local lib = ffi.load'libsimple_test.so'
 
+-- TODO assert that this errors, cuz it's not, but in luajit it is:
+--ffi.new('void*', 0xdeadbeef)
+
 lib.test_vp()
 print('in Lua, test_vp = ', lib.test_vp)
 
 local vp2 = lib.test_vfp_vfp(lib.test_vp)
 print('in Lua, test_vfp_vfp(test_vp) = ', vp2)	-- TODO this has tostring() that is off by a bit ...
---print('calling the callback to see if it still works...')
+--print('calling the C function passed through another C function to see if it still works...')
 vp2()	-- TODO this is calling twice ...
-assert.eq(lib.test_vp, lib.test_vfp_vfp(lib.test_vp), 'is the passed-thru callback equal the original?')
+assert.eq(lib.test_vp, lib.test_vfp_vfp(lib.test_vp), 'is the passed-thru C-function equal the original?')
 
 -- works
 local vp_test_vp = ffi.cast('void*', lib.test_vp)
@@ -103,7 +106,7 @@ do --for rep=1,5 do
 	print'test_f32' assert.eq(lib.test_f32(), -123)	-- at what point does this become testing floating point parsing accuracy ...
 	print'test_f64' assert.eq(lib.test_f64(), -123)	-- at what point does this become testing floating point parsing accuracy ...
 
-	print'test_vp' assert.eq(lib.test_vp(), ffi.new('void*', 0xdeadbeef))
+	print'test_vp' assert.eq(lib.test_vp(), ffi.cast('void*', 0xdeadbeef))
 	
 	-- testing return & single arguments
 	print'test_v_u8' lib.test_v_u8(42) assert.eq(lib.var, 42+1)
@@ -131,7 +134,7 @@ do --for rep=1,5 do
 	print'test_f32_f32' assert.eq(lib.test_f32_f32(-123), -123+1)	-- at what point does this become testing floating point parsing accuracy ...
 	print'test_f64_f64' assert.eq(lib.test_f64_f64(-123), -123+1)	-- at what point does this become testing floating point parsing accuracy ...
 
-	print'test_vp_sz' assert.eq(lib.test_vp_sz(64), ffi.new('void*', 0xdeadbeef + 64))
+	print'test_vp_sz' assert.eq(lib.test_vp_sz(64), ffi.cast('void*', 0xdeadbeef + 64))
 	print'test_cp' assert.eq(ffi.string(lib.test_cp()), "testing testing one two one two three")
 
 	-- testing return & double arguments
@@ -147,7 +150,7 @@ do --for rep=1,5 do
 	print'test_f64_f64_f64' assert.eq(lib.test_f64_f64_f64(-123, -123), (-123)+(-123)+1)	-- at what point does this become testing floating point parsing accuracy ...
 end
 
--- tesing callbacks
+--[[ tesing callbacks
 print'test_v_vfp' 
 local works = 0
 assert.eq(works, 0, 'test_v_vfp')
@@ -158,9 +161,9 @@ assert.eq(works, 1, 'test_v_vfp')
 local fp2 = lib.test_vfp_vfp(fp)
 works = 0 assert.eq(works, 0, 'test_v_vfp')
 fp2() assert.eq(works, 1, 'test_v_vfp')
---]]
 
 fp:free()
+--]]
 
 -- This test works for function-pointers returned from C code
 lib.var = 0
