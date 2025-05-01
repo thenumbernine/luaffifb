@@ -297,9 +297,8 @@ int callValuePush(
 
 /*
 ok i've completely lost track of what is what ...
-upvalues:
-#1: ctypeUserValue = the function's CType's uservalue[1] ... whatever that is
-#2: CallInfo userdata
+upvalue[1] = the function's CData userdata's CType userdata's uservalue[1] ... which describes the C function
+upvalue[2] = CallInfo userdata
 
 NOTICE the original C function is both in CallInfo->func and in the original userdata<CData + CFunction>
 ... however the original userdata<CData> isn't visible from within this function.
@@ -527,7 +526,16 @@ DEBUGPRINT("compile_function() DONE\n\n");
 }
 
 
-
+/*
+upvalue[1] = the function's CData userdata's CType userdata's uservalue[1] ... which describes the C function
+upvalue[2] = the Lua function
+*/
+int callCToLuaWithLibFFI(
+	lua_State * L
+) {
+	luaL_error(L, "TODO");
+	return 0;
+}
 
 /*
 TODO always do this, so we're always returning cdata, which is castable, which doesn't run us into the bug that at present module functions cannot be cast to other ptrs
@@ -544,11 +552,33 @@ CFunction compile_callback(
 	int funcCTypeUserValueLoc,
 	CType const * ct
 ) {									// stack: ...
-	luaL_error(L, "TODO callbacks");
+	luaL_error("TODO callback");
 
-	CFunction * pf = (CFunction*)push_cdata(L, funcCTypeUserValueLoc, ct);
+	int top = lua_gettop(L);
+	funcCTypeUserValueLoc = lua_absindex(L, funcCTypeUserValueLoc);
+
+	CFunction * pf = (CFunction*)push_cdata(L, funcCTypeUserValueLoc, ct);	// stack: ..., func CData userdata
+
 	// TODO don't do this, this is the function-pointer that is used for comparing things
-	//pf[0] = callCToLuaWithLibFFI;	// compile function ... which converts the C->Lua args, calls, and converts Lua->C return type.
+	// or maybe callbacks should be a different type from FUNCTION_TYPE and maybe FUNCTION_PTR_TYPE shouldn't be different from FUNCTION_TYPE ...
+	// or worse: HOW CAN C KNOW WHAT TO CALL?!
+	// TODO for this to work, we need a wasm-friendly way to make a wholly new C function and push the pointer here.
+	luaL_error("TODO callback");
+
+	pf[0] = callCToLuaWithLibFFI;	// compile function ... which converts the C->Lua args, calls, and converts Lua->C return type.
+									// now how do I save extra data for the conversion to handle?  the old luaffifb way was to make a wholly new function ...
+
+	// Maybe I'll just do like I see everywhere else and cross my fingers:
+	// That is: set the CType's userdata's uservalue[1]'s table entry with this new data as the key!
+
+	lua_pushvalue(L, funcCTypeUserValue);			// stack: ..., cdata, uv
+	lua_pushvalue(L, luaFuncLoc);					// stack: ..., cdata, uv, luafunc
+	lua_pushcclosure(L, callCToLuaWithLibFFI, 1);	// stack: ..., cdata, callCToLuaWithLibFFI;  ... with upvalues = {CType uservalue, luafunc}
+
+	lua_pushvalue(L, -2);						// stack: ..., cdata, callCToLuaWithLibFFI, cdata
+	lua_insert(L, -2);							// stack: ..., cdata, cdata, callCToLuaWithLibFFI
+	lua_rawset(L, funcCTypeUserValue);			// stack: ..., cdata;  uv[cdata] = callCToLuaWithLibFFI
+
 	return *pf;
 }
 
