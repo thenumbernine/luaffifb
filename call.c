@@ -537,7 +537,6 @@ lua_pop(L, 2);	// typename string & arg's ctype's userdata's uservalue
 	lua_pop(L, 1);									// stack: ..., cdata
 	assert(lua_gettop(L) == top + 1);
 #endif
-
 DEBUGPRINT("compile_function() DONE\n\n");
 }
 

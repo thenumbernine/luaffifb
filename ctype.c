@@ -266,15 +266,19 @@ void check_ctype(
 }
 
 /*
-to_cdata returns the CData* and pushes the user value onto the stack.
-If the index is not a ctype then ct is set to the zero value such
-that ct->type is INVALID_TYPE, a nil is pushed, and NULL is returned.
+Pushes stack[idx]'s uservalue[1] (i.e. the CType's userdata's uservalue[1]) onto the stack.
+Returns the void* associated with the CData, (i.e. ((CData*)ptr)+1, except references or non-array pointers )
+If the index is not a ctype then ct is set to the zero value such that ct->type is INVALID_TYPE, a nil is pushed, and NULL is returned.
 */
-void * to_cdata(lua_State* L, int idx, CType* ct) {
-													// stack: ...
-	// If we always returned cd+1 instead of dereferencing it for references, pointers, and arrays,
+void * to_cdata(
+	lua_State* L,
+	int idx,
+	CType * ctype	// out
+) {													// stack: ...
+	// Chris: If we always returned cd+1 instead of dereferencing it for references, pointers, and arrays,
 	// then the result of NULL can determine non-cdata, and this memset can be skipped for non-cdata values.
-	memset(ct, 0, sizeof(CType));
+	memset(ctype, 0, sizeof(CType));
+
 	if (!lua_isuserdata(L, idx) || !lua_getmetatable(L, idx)) {
 		lua_pushnil(L);								// stack: ..., nil
 		return NULL;
@@ -288,11 +292,11 @@ void * to_cdata(lua_State* L, int idx, CType* ct) {
 
 	lua_pop(L, 1);									// stack: ...
 	CData * cd = (CData *)lua_touserdata(L, idx);
-	*ct = cd->type;
+	*ctype = cd->type;
 	lua_getuservalue(L, idx);						// stack: ..., stack[idx]'s uservalue[1]
 
-	if ((ct->is_reference)
-		|| (ct->pointers && !ct->is_array)
+	if (ctype->is_reference
+		|| (ctype->pointers && !ctype->is_array)
 	) {
 		return *(void**) (cd+1);
 	} else {

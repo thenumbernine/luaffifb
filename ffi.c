@@ -104,11 +104,19 @@ int equalsRegistry(
 	return ret;
 }
 
-static int type_error(lua_State* L, int idx, const char* to_type, int to_usr, const CType* to_ct)
-{
-	assert(to_type || (to_usr && to_ct));
-	if (to_usr) {
-		to_usr = lua_absindex(L, to_usr);
+static void type_error(
+	lua_State * L,
+	int idx,
+	const char * typenameTo,
+	int ctypeUserValueLoc,
+	const CType * ctypeTo
+) {
+	// Weird, this function has 3 arguments to handle two different calling pathways internally within the library.
+	// Someone should've wrote two separate functions...
+	assert(typenameTo || (ctypeUserValueLoc && ctypeTo));
+
+	if (ctypeUserValueLoc) {
+		ctypeUserValueLoc = lua_absindex(L, ctypeUserValueLoc);
 	}
 
 	idx = lua_absindex(L, idx);
@@ -116,30 +124,31 @@ static int type_error(lua_State* L, int idx, const char* to_type, int to_usr, co
 	luaL_Buffer B;
 	luaL_buffinit(L, &B);
 
-	CType ft;
-	to_cdata(L, idx, &ft);
+	CType ctypeFrom;
+	to_cdata(L, idx, &ctypeFrom);	// stack: ..., uv = stack[idx]'s uservalue[1] (if it is CData, nil otherwise)
 
-	if (ft.type != INVALID_TYPE) {
-		push_type_name(L, -1, &ft);
-		lua_pushfstring(L, "unable to convert argument %d from cdata<%s> to cdata<", idx, lua_tostring(L, -1));
-		lua_remove(L, -2);
-		luaL_addvalue(&B);
+	if (ctypeFrom.type != INVALID_TYPE) {
+		push_type_name(L, -1, &ctypeFrom);	// stack: ..., uv, typenameFrom
+		// TODO for my newly cdata-enclosed-functions this is giving errors.
+		lua_pushfstring(L, "unable to convert argument %d from cdata<%s> to cdata<", idx, lua_tostring(L, -1));	// stack: ..., uv, typenameFrom, str
+		lua_remove(L, -2);					// stack: ..., uv, str
+		luaL_addvalue(&B);					// stack: ..., uv
 	} else {
-		lua_pushfstring(L, "unable to convert argument %d from lua<%s> to cdata<", idx, luaL_typename(L, idx));
-		luaL_addvalue(&B);
+		lua_pushfstring(L, "unable to convert argument %d from lua<%s> to cdata<", idx, luaL_typename(L, idx));	// stack: ..., uv, str
+		luaL_addvalue(&B);					// stack: ..., uv
 	}
 
-	if (to_ct) {
-		push_type_name(L, to_usr, to_ct);
-		luaL_addvalue(&B);
+	if (ctypeTo) {
+		push_type_name(L, ctypeUserValueLoc, ctypeTo);	// stack: ..., uv, str2
+		luaL_addvalue(&B);					// stack: ...
 	} else {
-		luaL_addstring(&B, to_type);
+		luaL_addstring(&B, typenameTo);		// stack: ...
 	}
 
-	luaL_addchar(&B, '>');
+	luaL_addchar(&B, '>');					// stack: ...
 
-	luaL_pushresult(&B);
-	return lua_error(L);
+	luaL_pushresult(&B);					// stack: ..., msg
+	lua_error(L);							// stack: ...
 }
 
 static void* userdata_toptr(lua_State* L, int idx)
@@ -448,7 +457,8 @@ static size_t unpack_vararg(lua_State* L, int i, char* to)
 		break;
 	}
 
-	return type_error(L, i, "vararg", 0, NULL);
+	type_error(L, i, "vararg", 0, NULL);	// never returns
+	return 0;
 }
 
 void unpack_varargs_stack(lua_State* L, int first, int last, char* to)
@@ -518,25 +528,10 @@ void unpack_varargs_reg(lua_State* L, int first, int last, char* to)
  * enum type. It leaves the stack unchanged. Will throw an error if the type
  * at idx can't be conerted.
  */
-int32_t check_enum(lua_State* L, int idx, int to_usr, const CType* to_ct)
-{
+int32_t check_enum(lua_State* L, int idx, int to_usr, const CType* to_ct) {
 	int32_t ret;
 
 	switch (lua_type(L, idx)) {
-	case LUA_TSTRING:
-		/* lookup string in to_usr to find value */
-		to_usr = lua_absindex(L, to_usr);
-		lua_pushvalue(L, idx);
-		lua_rawget(L, to_usr);
-
-		if (lua_isnil(L, -1)) {
-			goto err;
-		}
-
-		ret = (int32_t) lua_tointeger(L, -1);
-		lua_pop(L, 1);
-		return ret;
-
 	case LUA_TUSERDATA:
 		return check_int32(L, idx);
 
@@ -546,12 +541,25 @@ int32_t check_enum(lua_State* L, int idx, int to_usr, const CType* to_ct)
 	case LUA_TNUMBER:
 		return (int32_t) lua_tointeger(L, idx);
 
+	case LUA_TSTRING:
+		// lookup string in to_usr to find value
+		to_usr = lua_absindex(L, to_usr);
+		lua_pushvalue(L, idx);
+		lua_rawget(L, to_usr);
+
+		if (!lua_isnil(L, -1)) {
+			ret = (int32_t) lua_tointeger(L, -1);
+			lua_pop(L, 1);
+			return ret;
+		}
+
+		break;
 	default:
-		goto err;
+		break;
 	}
 
-err:
-	return type_error(L, idx, NULL, to_usr, to_ct);
+	type_error(L, idx, NULL, to_usr, to_ct);	// never returns
+	return 0;
 }
 
 /* to_pointer tries converts a value at idx to a pointer. It fills out ct and
@@ -652,8 +660,12 @@ static void set_struct(lua_State* L, int idx, void* to, int to_usr, const CType*
 /* to_typed_pointer converts a value at idx to a type tt with target uv to_usr
  * checking all types. May push a temporary value so that it can create
  * structs on the fly. */
-void* check_typed_pointer(lua_State* L, int idx, int to_usr, const CType* tt)
-{
+void * check_typed_pointer(
+	lua_State * L,
+	int idx,
+	int to_usr,
+	const CType * tt
+) {
 	CType ft;
 	void* p;
 
@@ -679,36 +691,31 @@ void* check_typed_pointer(lua_State* L, int idx, int to_usr, const CType* tt)
 
 	if (is_void_ptr(tt)) {
 		/* any pointer can convert to void* */
-		goto suc;
+		return p;
 
 	} else if (is_void_ptr(&ft) && (ft.pointers || ft.is_reference)) {
 		/* void* can convert to any pointer */
-		goto suc;
+		return p;
 
 	} else if (ft.is_null) {
 		/* NULL can convert to any pointer */
-		goto suc;
+		return p;
 
 	} else if (!is_same_type(L, to_usr, -1, tt, &ft)) {
 		/* the base type is different */
-		goto err;
+		type_error(L, idx, NULL, to_usr, tt);
 
 	} else if (tt->pointers != ft.pointers) {
-		goto err;
+		type_error(L, idx, NULL, to_usr, tt);
 
 	} else if (ft.const_mask & ~tt->const_mask) {
 		/* for every const in from it must be in to, there are further rules
 		 * for const casting (see the c++ spec), but they are hard to test
 		 * quickly */
-		goto err;
+		type_error(L, idx, NULL, to_usr, tt);
 	}
 
-suc:
 	return p;
-
-err:
-	type_error(L, idx, NULL, to_usr, tt);
-	return NULL;
 }
 
 /*
@@ -777,7 +784,7 @@ static CFunction check_cfunction(lua_State* L, int idx, int to_usr, const CType*
 			return f;
 		}
 
-		// Function cdatas are pinned and must be manually cleaned up by calling func:free(). 
+		// Function cdatas are pinned and must be manually cleaned up by calling func:free().
 		pushRegistry(L, &callbacks_key);
 		f = compile_callback(L, idx, to_usr, tt);
 		lua_pushboolean(L, 1);
@@ -1551,7 +1558,7 @@ static int cdata_call(
 	CFunction * p = (CFunction *)check_cdata(L, 1, &ct);	// stack: obj, ..., objUserVal = obj's uservalue[1]
 
 	if (push_user_mt(L, -1, &ct)) {
-		// handle CData __call metamethods:
+		// Handle CData __call metamethods:
 
 		lua_pushliteral(L, "__call");
 		lua_rawget(L, -2);
@@ -1566,7 +1573,9 @@ static int cdata_call(
 
 	if (ct.pointers || ct.type != FUNCTION_PTR_TYPE) {
 #if defined(CALL_WITH_LIBFFI)
-		// This could now be a libffi call object...
+
+		// Handle CData of functions from cmodule_index
+
 		lua_pushvalue(L, 1);			// stack: obj, ..., objUserVal, obj
 		lua_rawget(L, -2);				// stack: obj, ..., objUserVal, closure = objUserValue[obj]
 		if (lua_tocfunction(L, -1) == callLuaToCWithLibFFI) {
@@ -1580,8 +1589,8 @@ static int cdata_call(
 
 		return luaL_error(L, "only function callbacks are callable");
 	}
-	
-	// handle C function-ptrs:
+
+	// Handle C function-ptrs:
 
 	lua_pushvalue(L, 1);					// stack: obj, ..., objUserVal, obj
 	lua_rawget(L, lua_upvalueindex(1));		// stack: obj, ..., objUserVal, objUpVal = obj's upvalue[1] = function-closure in some cases? idk when ... whenever a lua-function invokes a __call method, which is never.
