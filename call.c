@@ -536,6 +536,10 @@ lua_pop(L, 2);	// typename string & arg's ctype's userdata's uservalue
 	lua_rawset(L, -3);								// stack: ..., cdata, ctypeUserVal;  ctypeUserVal[cdata] = callLuaToCWithLibFFI
 	lua_pop(L, 1);									// stack: ..., cdata
 	assert(lua_gettop(L) == top + 1);
+#else	// the old way:
+						// stack: ..., cdata, ctypeUserVal, callInfo, callLuaToCWithLibFFI
+	lua_insert(L, -4); 	// stack: ..., callLuaToCWithLibFFI, cdata, ctypeUserVal, callInfo
+	lua_pop(L, 3); 		// stack: ..., callLuaToCWithLibFFI
 #endif
 DEBUGPRINT("compile_function() DONE\n\n");
 }
@@ -546,11 +550,11 @@ DEBUGPRINT("compile_function() DONE\n\n");
 /* 
 TODO always do this, so we're always returning cdata, which is castable, which doesn't run us into the bug that at present module functions cannot be cast to other ptrs
 TODO this is gonna push a CData, so the call will have to be handled in cdata_call
-	so cdata_call will have to support the 
-	*) old JIT-based closure
-	*) the old closures-of-CFunctoins from compile_function() below which I gotta get rid of to get ffi-CFunction-casting to work
-	*) new CData closures that don't use JIT but do use LibFFI
-	*) new closures-of-CFunctions in compile_functin() TBD
+so cdata_call will have to support the 
+*) old JIT-based closure
+*) the old closures-of-CFunctoins from compile_function() below which I gotta get rid of to get ffi-CFunction-casting to work
+*) new CData closures that don't use JIT but do use LibFFI
+*) new closures-of-CFunctions in compile_functin() TBD
 */
 CFunction compile_callback(
 	lua_State* L,
@@ -561,7 +565,7 @@ CFunction compile_callback(
 	luaL_error(L, "TODO callbacks");
 
 	CFunction * pf = (CFunction*)push_cdata(L, funcCTypeUserValueLoc, ct);
-	//pf[0] = callCToLuaWrapper;	// compile function ... which converts the C->Lua args, calls, and converts Lua->C return type.
+	//pf[0] = callCToLuaWithLibFFI;	// compile function ... which converts the C->Lua args, calls, and converts Lua->C return type.
 	return *pf;
 }
 

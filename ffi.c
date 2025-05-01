@@ -220,6 +220,7 @@ static int64_t check_intptr(lua_State* L, int idx, void* p, CType* ct)
 	switch (ct->type) {
 	case INTPTR_TYPE:
 	case FUNCTION_PTR_TYPE:
+	case FUNCTION_TYPE:
 		return *(intptr_t*) p;
 
 	case INT64_TYPE:
@@ -1571,9 +1572,8 @@ static int cdata_call(
 		}
 	}	// stack: obj, ..., objUserVal
 
-	if (ct.pointers || ct.type != FUNCTION_PTR_TYPE) {
 #if defined(CALL_WITH_LIBFFI)
-
+	if (ct.type == FUNCTION_TYPE) {
 		// Handle CData of functions from cmodule_index
 
 		lua_pushvalue(L, 1);			// stack: obj, ..., objUserVal, obj
@@ -1585,13 +1585,35 @@ static int cdata_call(
 			return lua_gettop(L);
 		}
 		assert(lua_type(L, -1) == LUA_TNIL);	//right? who else is using this?
+	}
 #endif	//CALL_WITH_LIBFFI
 
+	if (ct.pointers || ct.type != FUNCTION_PTR_TYPE) {
 		return luaL_error(L, "only function callbacks are callable");
 	}
 
 	// Handle C function-ptrs:
+#if defined(CALL_WITH_LIBFFI)
+	// now compile_function returns a CData so I gotta work around that
+	
+	lua_pushvalue(L, 1);					// stack: obj, ..., objUserVal, obj
+	lua_rawget(L, lua_upvalueindex(1));		// stack: obj, ..., objUserVal, objUpVal = obj's upvalue[1] = function-closure
+	if (!lua_isfunction(L, -1)) {			// if obj's upvalue[1] is not a lua-function ...
+		lua_pop(L, 1);						// stack: obj, ..., objUserVal
+		compile_function(L, *p, -1, &ct);	// stack: obj, ..., objUserVal, CData userdata of the function ... same as obj? or dif userdata representing the same CData?
+		lua_rawget(L, -2);					// stack: obj, ..., objUserVal, closure = objUserVal[CData userdata of function]
+		assert(lua_type(L, -1) == LUA_TFUNCTION);
+		assert(lua_gettop(L) == top + 2); 	// stack: obj, ..., objUserVal, closure
+		lua_replace(L, 1);					// stack: closure, ..., objUserVal
+	} else {
+		lua_replace(L, 1);					// stack: closure, ..., objUserVal
+	}
 
+	lua_pop(L, 1);							// stack: closure, ...
+
+
+#else	// The old way:
+	
 	lua_pushvalue(L, 1);					// stack: obj, ..., objUserVal, obj
 	lua_rawget(L, lua_upvalueindex(1));		// stack: obj, ..., objUserVal, objUpVal = obj's upvalue[1] = function-closure in some cases? idk when ... whenever a lua-function invokes a __call method, which is never.
 	if (!lua_isfunction(L, -1)) {			// if obj's upvalue[1] is not a lua-function ...
@@ -1611,6 +1633,7 @@ static int cdata_call(
 	}
 
 	lua_pop(L, 1);							// stack: closure, ...
+#endif	
 	assert(lua_gettop(L) == top);
 
 	lua_call(L, lua_gettop(L) - 1, LUA_MULTRET);	// stack: closure(...)'s results...
@@ -2468,72 +2491,6 @@ static int cdata_bxor(lua_State* L) { NUMBER_ONLY_BINOP("__bxor", BXOR, BXORC); 
 static int cdata_shl(lua_State* L) { NUMBER_ONLY_BINOP("__shl", SHL, SHLC); }
 static int cdata_shr(lua_State* L) { NUMBER_ONLY_BINOP("__shr", SHR, SHRC); }
 
-#define COMPARE_BINOP(OPSTR, OP, OPC)	                                   \
-	CType lt, rt;                                                    \
-	void *lp, *rp;                                                          \
-	int ret, res;                                                           \
-	                                                                        \
-	lua_settop(L, 2);                                                       \
-	                                                                        \
-	lp = to_cdata(L, 1, &lt);                                               \
-	rp = to_cdata(L, 2, &rt);                                               \
-	                                                                        \
-	ret = call_user_binop(L, OPSTR, 1, 3, &lt, 2, 4, &rt);                  \
-	if (ret >= 0) {                                                         \
-	    return ret;                                                         \
-	}                                                                       \
-	                                                                        \
-	if (IS_COMPLEX(lt.type) || IS_COMPLEX(rt.type)) {                       \
-	    complex_double left = check_complex(L, 1, lp, &lt);                 \
-	    complex_double right = check_complex(L, 2, rp, &rt);                \
-	                                                                        \
-	    res = OPC(left, right);                                             \
-	                                                                        \
-	    lua_pushboolean(L, res);                                            \
-	                                                                        \
-	} else {                                                                \
-	    int64_t left = check_intptr(L, 1, lp, &lt);                         \
-	    int64_t right = check_intptr(L, 2, rp, &rt);                        \
-	                                                                        \
-	    if (lt.pointers && rt.pointers) {                                   \
-	        if (is_void_ptr(&lt) || is_void_ptr(&rt) || is_same_type(L, 3, 4, &lt, &rt)) { \
-	            res = OP((uint64_t) left, (uint64_t) right);                \
-	        } else {                                                        \
-	            goto err;                                                   \
-	        }                                                               \
-	                                                                        \
-	    } else if (lt.is_null && rt.type == FUNCTION_PTR_TYPE) {            \
-	        res = OP((uint64_t) left, (uint64_t) right);                    \
-	                                                                        \
-	    } else if (rt.is_null && lt.type == FUNCTION_PTR_TYPE) {            \
-	        res = OP((uint64_t) left, (uint64_t) right);                    \
-	                                                                        \
-	    } else if (lt.pointers && rt.type == INTPTR_TYPE && rt.is_unsigned) {\
-	        res = OP((uint64_t) left, (uint64_t) right);                    \
-	                                                                        \
-	    } else if (rt.pointers && lt.type == INTPTR_TYPE && lt.is_unsigned) {\
-	        res = OP((uint64_t) left, (uint64_t) right);                    \
-	                                                                        \
-	    } else if (rt.pointers || lt.pointers) {                            \
-	        goto err;                                                       \
-	                                                                        \
-	    } else if (lt.is_unsigned && rt.is_unsigned) {                      \
-	        res = OP((uint64_t) left, (uint64_t) right);                    \
-	                                                                        \
-	    } else if (lt.is_unsigned) {                                        \
-	        res = OP((int64_t) (uint64_t) left, right);                     \
-	                                                                        \
-	    } else if (rt.is_unsigned) {                                        \
-	        res = OP(left, (int64_t) (uint64_t) right);                     \
-	                                                                        \
-	    } else {                                                            \
-	        res = OP(left, right);                                          \
-	    }                                                                   \
-	                                                                        \
-	    lua_pushboolean(L, res);                                            \
-	}                                                                       \
-	return 1
-
 #define EQ(l, r) (l) == (r)
 #define LT(l, r) (l) < (r)
 #define LE(l, r) (l) <= (r)
@@ -2549,7 +2506,88 @@ static int cdata_shr(lua_State* L) { NUMBER_ONLY_BINOP("__shr", SHR, SHRC); }
 
 static int cdata_eq(lua_State* L)
 {
-	COMPARE_BINOP("__eq", EQ, EQC);
+	char const * opstr = "__eq";
+#define OP EQ
+#define OPC EQC
+
+	CType lt, rt;
+	void *lp, *rp;
+	int ret, res;
+
+	lua_settop(L, 2);
+
+	lp = to_cdata(L, 1, &lt);
+	rp = to_cdata(L, 2, &rt);
+
+	ret = call_user_binop(L, opstr, 1, 3, &lt, 2, 4, &rt);
+	if (ret >= 0) {
+	    return ret;
+	}
+
+	if (IS_COMPLEX(lt.type) || IS_COMPLEX(rt.type)) {
+	    complex_double left = check_complex(L, 1, lp, &lt);
+	    complex_double right = check_complex(L, 2, rp, &rt);
+
+	    res = OPC(left, right);
+
+	    lua_pushboolean(L, res);
+
+	} else {
+	    int64_t left = check_intptr(L, 1, lp, &lt);
+	    int64_t right = check_intptr(L, 2, rp, &rt);
+
+		// Chris: what a mess.  putting this here for now. Don't care about false-positives
+		if (lt.type == FUNCTION_TYPE 
+			|| lt.type == FUNCTION_PTR_TYPE 
+			|| rt.type == FUNCTION_TYPE
+			|| rt.type == FUNCTION_PTR_TYPE
+		) {
+			lua_pushboolean(L, OP((uint64_t) left, (uint64_t) right));
+			return 1;
+		}
+
+	    if (lt.pointers && rt.pointers) {
+	        if (is_void_ptr(&lt) || is_void_ptr(&rt) || is_same_type(L, 3, 4, &lt, &rt)) {
+	            res = OP((uint64_t) left, (uint64_t) right);
+	        } else {
+	            goto err;
+	        }
+
+	    } else if (lt.is_null && (rt.type == FUNCTION_PTR_TYPE)) {
+	        res = OP((uint64_t) left, (uint64_t) right);
+
+	    } else if (rt.is_null && (lt.type == FUNCTION_PTR_TYPE)) {
+	        res = OP((uint64_t) left, (uint64_t) right);
+
+	    } else if (lt.pointers && rt.type == INTPTR_TYPE && rt.is_unsigned) {
+	        res = OP((uint64_t) left, (uint64_t) right);
+
+	    } else if (rt.pointers && lt.type == INTPTR_TYPE && lt.is_unsigned) {
+	        res = OP((uint64_t) left, (uint64_t) right);
+
+	    } else if (rt.pointers || lt.pointers) {
+	        goto err;
+
+	    } else if (lt.is_unsigned && rt.is_unsigned) {
+	        res = OP((uint64_t) left, (uint64_t) right);
+
+	    } else if (lt.is_unsigned) {
+	        res = OP((int64_t) (uint64_t) left, right);
+
+	    } else if (rt.is_unsigned) {
+	        res = OP(left, (int64_t) (uint64_t) right);
+
+	    } else {
+	        res = OP(left, right);
+	    }
+
+	    lua_pushboolean(L, res);
+	}
+	return 1;
+
+#undef OP
+#undef OPC
+
 err:
 	lua_pushboolean(L, 0);
 	return 1;
@@ -2557,7 +2595,88 @@ err:
 
 static int cdata_lt(lua_State* L)
 {
-	COMPARE_BINOP("__lt", LT, LTC);
+	char const * opstr = "__lt";
+#define OP LT
+#define OPC LTC
+
+	CType lt, rt;
+	void *lp, *rp;
+	int ret, res;
+
+	lua_settop(L, 2);
+
+	lp = to_cdata(L, 1, &lt);
+	rp = to_cdata(L, 2, &rt);
+
+	ret = call_user_binop(L, opstr, 1, 3, &lt, 2, 4, &rt);
+	if (ret >= 0) {
+	    return ret;
+	}
+
+	if (IS_COMPLEX(lt.type) || IS_COMPLEX(rt.type)) {
+	    complex_double left = check_complex(L, 1, lp, &lt);
+	    complex_double right = check_complex(L, 2, rp, &rt);
+
+	    res = OPC(left, right);
+
+	    lua_pushboolean(L, res);
+
+	} else {
+	    int64_t left = check_intptr(L, 1, lp, &lt);
+	    int64_t right = check_intptr(L, 2, rp, &rt);
+
+		// Chris: what a mess.  putting this here for now. Don't care about false-positives
+		if (lt.type == FUNCTION_TYPE 
+			|| lt.type == FUNCTION_PTR_TYPE 
+			|| rt.type == FUNCTION_TYPE
+			|| rt.type == FUNCTION_PTR_TYPE
+		) {
+			lua_pushboolean(L, OP((uint64_t) left, (uint64_t) right));
+			return 1;
+		}
+
+	    if (lt.pointers && rt.pointers) {
+	        if (is_void_ptr(&lt) || is_void_ptr(&rt) || is_same_type(L, 3, 4, &lt, &rt)) {
+	            res = OP((uint64_t) left, (uint64_t) right);
+	        } else {
+	            goto err;
+	        }
+
+	    } else if (lt.is_null && (rt.type == FUNCTION_PTR_TYPE || rt.type == FUNCTION_TYPE)) {
+	        res = OP((uint64_t) left, (uint64_t) right);
+
+	    } else if (rt.is_null && (lt.type == FUNCTION_PTR_TYPE || lt.type == FUNCTION_TYPE)) {
+	        res = OP((uint64_t) left, (uint64_t) right);
+
+	    } else if (lt.pointers && rt.type == INTPTR_TYPE && rt.is_unsigned) {
+	        res = OP((uint64_t) left, (uint64_t) right);
+
+	    } else if (rt.pointers && lt.type == INTPTR_TYPE && lt.is_unsigned) {
+	        res = OP((uint64_t) left, (uint64_t) right);
+
+	    } else if (rt.pointers || lt.pointers) {
+	        goto err;
+
+	    } else if (lt.is_unsigned && rt.is_unsigned) {
+	        res = OP((uint64_t) left, (uint64_t) right);
+
+	    } else if (lt.is_unsigned) {
+	        res = OP((int64_t) (uint64_t) left, right);
+
+	    } else if (rt.is_unsigned) {
+	        res = OP(left, (int64_t) (uint64_t) right);
+
+	    } else {
+	        res = OP(left, right);
+	    }
+
+	    lua_pushboolean(L, res);
+	}
+	return 1;
+
+#undef OP
+#undef OPC
+
 err:
 	lua_getuservalue(L, 1);
 	lua_getuservalue(L, 2);
@@ -2568,7 +2687,89 @@ err:
 
 static int cdata_le(lua_State* L)
 {
-	COMPARE_BINOP("__le", LE, LEC);
+
+	char const * opstr = "__le";
+#define OP LE
+#define OPC LEC
+
+	CType lt, rt;
+	void *lp, *rp;
+	int ret, res;
+
+	lua_settop(L, 2);
+
+	lp = to_cdata(L, 1, &lt);
+	rp = to_cdata(L, 2, &rt);
+
+	ret = call_user_binop(L, opstr, 1, 3, &lt, 2, 4, &rt);
+	if (ret >= 0) {
+	    return ret;
+	}
+
+	if (IS_COMPLEX(lt.type) || IS_COMPLEX(rt.type)) {
+	    complex_double left = check_complex(L, 1, lp, &lt);
+	    complex_double right = check_complex(L, 2, rp, &rt);
+
+	    res = OPC(left, right);
+
+	    lua_pushboolean(L, res);
+
+	} else {
+	    int64_t left = check_intptr(L, 1, lp, &lt);
+	    int64_t right = check_intptr(L, 2, rp, &rt);
+
+		// Chris: what a mess.  putting this here for now. Don't care about false-positives
+		if (lt.type == FUNCTION_TYPE 
+			|| lt.type == FUNCTION_PTR_TYPE 
+			|| rt.type == FUNCTION_TYPE
+			|| rt.type == FUNCTION_PTR_TYPE
+		) {
+			lua_pushboolean(L, OP((uint64_t) left, (uint64_t) right));
+			return 1;
+		}
+
+	    if (lt.pointers && rt.pointers) {
+	        if (is_void_ptr(&lt) || is_void_ptr(&rt) || is_same_type(L, 3, 4, &lt, &rt)) {
+	            res = OP((uint64_t) left, (uint64_t) right);
+	        } else {
+	            goto err;
+	        }
+
+	    } else if (lt.is_null && (rt.type == FUNCTION_PTR_TYPE || rt.type == FUNCTION_TYPE)) {
+	        res = OP((uint64_t) left, (uint64_t) right);
+
+	    } else if (rt.is_null && (lt.type == FUNCTION_PTR_TYPE || lt.type == FUNCTION_TYPE)) {
+	        res = OP((uint64_t) left, (uint64_t) right);
+
+	    } else if (lt.pointers && rt.type == INTPTR_TYPE && rt.is_unsigned) {
+	        res = OP((uint64_t) left, (uint64_t) right);
+
+	    } else if (rt.pointers && lt.type == INTPTR_TYPE && lt.is_unsigned) {
+	        res = OP((uint64_t) left, (uint64_t) right);
+
+	    } else if (rt.pointers || lt.pointers) {
+	        goto err;
+
+	    } else if (lt.is_unsigned && rt.is_unsigned) {
+	        res = OP((uint64_t) left, (uint64_t) right);
+
+	    } else if (lt.is_unsigned) {
+	        res = OP((int64_t) (uint64_t) left, right);
+
+	    } else if (rt.is_unsigned) {
+	        res = OP(left, (int64_t) (uint64_t) right);
+
+	    } else {
+	        res = OP(left, right);
+	    }
+
+	    lua_pushboolean(L, res);
+	}
+	return 1;
+
+#undef OP
+#undef OPC
+
 err:
 	lua_getuservalue(L, 1);
 	lua_getuservalue(L, 2);
@@ -2690,17 +2891,14 @@ err:
 	return luaL_error(L, "type %s has no member %s", lua_tostring(L, -1), lua_tostring(L, 2));
 }
 
-static int cdata_tostring(lua_State* L)
-{
-	CType ct;
+static int cdata_tostring(lua_State * L) {
 	char buf[64];
-	void* p;
-	int ret;
 
 	lua_settop(L, 1);
-	p = to_cdata(L, 1, &ct);
+	CType ct;
+	void * p = to_cdata(L, 1, &ct);
 
-	ret = call_user_op(L, "__tostring", 1, 2, &ct);
+	int ret = call_user_op(L, "__tostring", 1, 2, &ct);
 	if (ret >= 0) {
 		return ret;
 	}
@@ -2732,15 +2930,20 @@ static int cdata_tostring(lua_State* L)
 		}
 		return 1;
 
+	case FUNCTION_PTR_TYPE:
+		push_type_name(L, -1, &ct);
+//		p = *(void**) p;
+		lua_pushfstring(L, "cdata<%s>: %p", lua_tostring(L, -1), *(void**) p);
+		return 1;
+
 	// Chris:
 	// if a FUNCTION_PTR_TYPE is a void(*)() returned from a C function
 	// then is a FUNCTION_TYPE the C function itself?
 	// I stil don't get the difference... except to distinguish extra resources each uses behind the scenes ...
-	case FUNCTION_PTR_TYPE:
 	case FUNCTION_TYPE:
-		p = *(void**) p;
+		// Chris: here for my CALL_WITH_LIBFFI cdata wrapping C functions
 		push_type_name(L, -1, &ct);
-		lua_pushfstring(L, "cdata<%s>: %p", lua_tostring(L, -1), *(void**) p);
+		lua_pushfstring(L, "cdata<%s>: %p", lua_tostring(L, -1), *(void**)p);
 		return 1;
 
 	case INTPTR_TYPE:

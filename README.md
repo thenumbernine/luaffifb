@@ -6,7 +6,7 @@ Me picking up the facebook-archive luaffifb project.  Of all the lua-ffi project
 - Arithmetic on pointers no longer calls into the metatmethod of the underlying CType - just like in vanilla LuaJIT.
 - luaffifb's `tonumber` now handles float, double, complex float, complex double, as well as integer types; and it no longer converts pointers and arrays - just like in vanilla LuaJIT.
 - `bool` is no longer serialized as `unsigned bool` - just like in vanilla LuaJIT.
-- For `CALL_WITH_LIBFFI` I no longer replace C functions with `lua_CFunction`'s that might run a bit faster but cannot be compared or converted to CData.  The trade off is now there's a separate Lua `__call` per C-function call, but now we do get casting C functions to pointers and comparing them.
+- For `CALL_WITH_LIBFFI` I no longer replace C functions with `lua_CFunction`'s that might run a bit faster but cannot be compared or converted to CData.  The trade off is now there's a separate Lua `__call` per C-function call, but now we do get casting C functions to pointers and operate on them.
 
 # Changes I've made
 
