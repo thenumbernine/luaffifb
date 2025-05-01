@@ -130,11 +130,11 @@ static void type_error(
 	if (ctypeFrom.type != INVALID_TYPE) {
 		push_type_name(L, -1, &ctypeFrom);	// stack: ..., uv, typenameFrom
 		// TODO for my newly cdata-enclosed-functions this is giving errors.
-		lua_pushfstring(L, "unable to convert argument %d from cdata<%s> to cdata<", idx, lua_tostring(L, -1));	// stack: ..., uv, typenameFrom, str
+		lua_pushfstring(L, "cannot convert argument %d from cdata<%s> to cdata<", idx, lua_tostring(L, -1));	// stack: ..., uv, typenameFrom, str
 		lua_remove(L, -2);					// stack: ..., uv, str
 		luaL_addvalue(&B);					// stack: ..., uv
 	} else {
-		lua_pushfstring(L, "unable to convert argument %d from lua<%s> to cdata<", idx, luaL_typename(L, idx));	// stack: ..., uv, str
+		lua_pushfstring(L, "cannot convert argument %d from lua<%s> to cdata<", idx, luaL_typename(L, idx));	// stack: ..., uv, str
 		luaL_addvalue(&B);					// stack: ..., uv
 	}
 
@@ -1275,7 +1275,7 @@ static int do_new(
 	lua_State * L,
 	int is_cast
 ) {													// stack: typedesc, args...
-	int check_ptrs = !is_cast;
+	int check_ptrs = !is_cast;	// does is_cast change or something, or ... nevermind ... smh ...
 
 	CType ct;
 	check_ctype(L, 1, &ct);							// stack: typedesc, args..., typedesc's CType's uservalue[1]
@@ -2733,7 +2733,12 @@ static int cdata_tostring(lua_State* L)
 		}
 		return 1;
 
+	// Chris:
+	// if a FUNCTION_PTR_TYPE is a void(*)() returned from a C function
+	// then is a FUNCTION_TYPE the C function itself?
+	// I stil don't get the difference... except to distinguish extra resources each uses behind the scenes ...
 	case FUNCTION_PTR_TYPE:
+	case FUNCTION_TYPE:
 		p = *(void**) p;
 		push_type_name(L, -1, &ct);
 		lua_pushfstring(L, "cdata<%s>: %p", lua_tostring(L, -1), *(void**) p);
@@ -2831,8 +2836,9 @@ static int ffi_number(lua_State* L) {
 	return 1;
 }
 
-static int ffi_string(lua_State* L)
-{
+static int ffi_string(
+	lua_State * L
+) {
 	CType ct;
 	char* data;
 	lua_settop(L, 2);
@@ -2867,7 +2873,7 @@ static int ffi_string(lua_State* L)
 		return 1;
 	}
 
-	return luaL_error(L, "unable to convert cdata to string");
+	return luaL_error(L, "cannot convert cdata to string");
 }
 
 static int ffi_copy(lua_State* L)

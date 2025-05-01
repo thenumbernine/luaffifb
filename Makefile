@@ -34,7 +34,7 @@ DEBUG=1
 ifeq ($(DEBUG),1)
 	# debug
 	CFLAGS+= -DDEBUG -O0 -gdwarf-2 -mfix-and-continue
-	TEST_CMD= echo 'bt' > lldb.batch && lldb --batch -K lldb.batch -o run -f lua -- test.lua
+	TEST_CMD=        echo 'bt' > lldb.batch && lldb --batch -K lldb.batch -o run -f lua -- test.lua
 	SIMPLE_TEST_CMD= echo 'bt' > lldb.batch && lldb --batch -K lldb.batch -o run -f lua -- simple_test.lua
 else
 	# release
