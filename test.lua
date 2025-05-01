@@ -35,6 +35,7 @@ end
 local function check(a, b, msg)
     if a ~= b then
         print('check', a, b)
+		print(debug.traceback())
     end
     return _G.assert(a == b, msg or "failed")
 end
@@ -359,9 +360,6 @@ for convention,c in pairs(dlls) do
     check(c.inc_e8('FOO8'), c.BAR8)
     check(c.inc_e16(c.FOO16), c.BAR16)
     check(c.inc_e32(c.FOO32), c.BAR32)
-print('g_fp', c.g_fp)
-print('ret_fp', c.ret_fp)
-print('ret_fp2', c.ret_fp2)
 	check(c.ret_fp(c.g_fp), c.g_fp)
     check(c.ret_fp2(c.g_fp), c.g_fp)
 

@@ -2577,8 +2577,7 @@ err:
 	return luaL_error(L, "trying to compare incompatible types %s and %s", lua_tostring(L, -2), lua_tostring(L, -1));
 }
 
-static const char* etype_tostring(int type)
-{
+static const char* etype_tostring(int type) {
 	switch (type) {
 	case VOID_TYPE: return "void";
 	case DOUBLE_TYPE: return "double";

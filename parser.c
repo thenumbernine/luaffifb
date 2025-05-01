@@ -1303,7 +1303,7 @@ static void append_type_name(luaL_Buffer* B, int usr, const CType* ct, enum name
 			luaL_addstring(B, "const ");
 		}
 
-		if (ct->is_unsigned) {
+		if (ct->is_unsigned && ct->type != BOOL_TYPE) {
 			luaL_addstring(B, "unsigned ");
 		}
 
