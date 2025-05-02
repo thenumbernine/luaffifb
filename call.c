@@ -444,7 +444,7 @@ DEBUGPRINT("...callInfo %p\n", callInfo);
 	[0] = userdata of the CType of the return type
 	[i] = userdata of the CType of the i'th arg type, for i>0
 	*/
-	for (int i = 1; i <= nargs; i++) {
+	for (int i = 1; i <= (int)nargs; i++) {
 		callInfo->valuePtrs[i-1] = &callInfo->valueData[i-1];
 		lua_rawgeti(L, funcCTypeUserValueLoc, i);						// stack: ..., cdata, ctypeUserVal, callInfo, ctypeUserVal[i]
 		CType const * argCType = (CType const *)lua_touserdata(L, -1);
