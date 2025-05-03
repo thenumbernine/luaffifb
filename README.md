@@ -1,4 +1,4 @@
-Me picking up the facebook-archive luaffifb project.  Of all the lua-ffi projects, this one seemed furthest along.
+I am forking the old luaffifb project to get it working with my [lua-ffi-wasm](https://github.com/thenumbernine/lua-ffi-wasm) project, to run my [luajit opengl sdl framework in browser](https://github.com/thenumbernine/glapp-js).
 
 # Fixes I've made
 
@@ -20,6 +20,9 @@ Me picking up the facebook-archive luaffifb project.  Of all the lua-ffi project
 - Looks like comparing function-pointers was always breaking the test suite ... better fix that.
 - I still need callbacks in `CALL_WITH_LIBFFI`.
 
+# Here's the original readme:
+<hr>
+<hr>
 <hr>
 
 About
