@@ -656,8 +656,6 @@ static int is_same_type(lua_State* L, int usr1, int usr2, const CType* t1, const
 	return lua_rawequal(L, usr1, usr2);
 }
 
-static void set_struct(lua_State* L, int idx, void* to, int to_usr, const CType* tt, int check_pointers);
-
 /* to_typed_pointer converts a value at idx to a type tt with target uv to_usr
  * checking all types. May push a temporary value so that it can create
  * structs on the fly. */
@@ -986,7 +984,7 @@ static ptrdiff_t get_member(lua_State* L, int usr, const CType* ct, CType* mt)
 	return off;
 }
 
-static void set_struct(lua_State* L, int idx, void* to, int to_usr, const CType* tt, int check_pointers)
+void set_struct(lua_State* L, int idx, void* to, int to_usr, const CType* tt, int check_pointers)
 {
 	int have_first = 0;
 	int have_other = 0;

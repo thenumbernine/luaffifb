@@ -123,6 +123,9 @@ static inline ffi_type * getFFITypeForCType(
 		return &ffi_type_pointer;
 	case FUNCTION_TYPE:			// object that handles ffi calls ... used to be a pure lua_CFunction, but I changed it to an object, I forget why, something about determining its type or something
 		return &ffi_type_pointer;
+	case STRUCT_TYPE:
+	case UNION_TYPE:
+		return &ffi_type_pointer;
 	default:
 		luaL_error(L, "NYI: getFFITypeForCType type=%d", ctype->type);
 		return NULL;
@@ -139,6 +142,7 @@ static inline ffi_type * getFFITypeForCType(
 #endif
 
 
+// used by callLuaToCWithLibFFI argument conversion
 void luaToCallValue(
 	lua_State * L,
 
@@ -196,6 +200,10 @@ void luaToCallValue(
 		case FUNCTION_TYPE:
 			callValue->ptr = (void*)cast_uint64(L, i, 1);
 			break;
+		case STRUCT_TYPE:
+		case UNION_TYPE:
+			callValue->ptr = (void*)cast_uint64(L, i, 1);
+			break;
 		default:
 			luaL_error(L, "NYI: luaToCallValue type=%d", ctype->type);
 		}
@@ -204,6 +212,7 @@ void luaToCallValue(
 
 
 // Returns how many values were pushed onto the stack ... 1, or for non-pointer VOID_TYPE 0
+// Used by callLuaToCWithLibFFI return data
 int callValuePush(
 	lua_State * L,
 
@@ -297,6 +306,15 @@ int callValuePush(
 			void ** ptr = (void **)push_cdata(L, -1, retCType);	// stack: ..., return CData's uservalue
 			ptr[0] = ret->ptr;
 			return 1;
+		}
+	case STRUCT_TYPE:
+	case UNION_TYPE:
+		{
+			void ** ptr = (void **)push_cdata(L, -1, retCType);	// stack: ..., return CData's uservalue
+			//ptr[0] = ret->ptr;
+			// this is the return value from libffi
+			// so I gotta copy it, right?
+			set_struct(L, -1, ptr, retCTypeUserValueLoc, &retCType, 1);
 		}
 	default:
 		luaL_error(L, "NYI: callValuePush type=%d", retCType->type);

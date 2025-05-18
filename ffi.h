@@ -249,3 +249,6 @@ void unpack_varargs_stack_skip(lua_State* L, int first, int last, int ints_to_sk
 void unpack_varargs_float(lua_State* L, int first, int last, int max, char* to);
 void unpack_varargs_int(lua_State* L, int first, int last, int max, char* to);
 void print_type(lua_State* L, const CType* ct);
+
+// used by call.c and ffi.c
+void set_struct(lua_State* L, int idx, void* to, int to_usr, const CType* tt, int check_pointers);
