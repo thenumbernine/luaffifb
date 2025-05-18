@@ -121,6 +121,8 @@ static inline ffi_type * getFFITypeForCType(
 		return &ffi_type_complex_double;
 	case FUNCTION_PTR_TYPE:
 		return &ffi_type_pointer;
+	case FUNCTION_TYPE:			// object that handles ffi calls ... used to be a pure lua_CFunction, but I changed it to an object, I forget why, something about determining its type or something
+		return &ffi_type_pointer;
 	default:
 		luaL_error(L, "NYI: getFFITypeForCType type=%d", ctype->type);
 		return NULL;
@@ -190,6 +192,9 @@ void luaToCallValue(
 			break;
 		case COMPLEX_DOUBLE_TYPE:	// TODO FIXME
 			callValue->complex_doubleValue = check_complex_double(L, i);
+			break;
+		case FUNCTION_TYPE:
+			callValue->ptr = (void*)cast_uint64(L, i, 1);
 			break;
 		default:
 			luaL_error(L, "NYI: luaToCallValue type=%d", ctype->type);
@@ -287,6 +292,12 @@ int callValuePush(
 			ptr[0] = ret->complex_doubleValue;
 		}
 		return 1;
+	case FUNCTION_TYPE:
+		{
+			void ** ptr = (void **)push_cdata(L, -1, retCType);	// stack: ..., return CData's uservalue
+			ptr[0] = ret->ptr;
+			return 1;
+		}
 	default:
 		luaL_error(L, "NYI: callValuePush type=%d", retCType->type);
 	}
