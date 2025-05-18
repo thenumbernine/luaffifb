@@ -122,7 +122,7 @@ static inline ffi_type * getFFITypeForCType(
 	case FUNCTION_PTR_TYPE:
 		return &ffi_type_pointer;
 	default:
-		luaL_error(L, "NYI: call return type");
+		luaL_error(L, "NYI: getFFITypeForCType type=%d", ctype->type);
 		return NULL;
 	}
 }
@@ -192,7 +192,7 @@ void luaToCallValue(
 			callValue->complex_doubleValue = check_complex_double(L, i);
 			break;
 		default:
-			luaL_error(L, "NYI: call type");
+			luaL_error(L, "NYI: luaToCallValue type=%d", ctype->type);
 		}
 	}
 }
@@ -288,7 +288,7 @@ int callValuePush(
 		}
 		return 1;
 	default:
-		luaL_error(L, "NYI: call return type");
+		luaL_error(L, "NYI: callValuePush type=%d", retCType->type);
 	}
 
 	return 0;
