@@ -7,6 +7,8 @@ I am forking the old luaffifb project to get it working with my [lua-ffi-wasm](h
 - luaffifb's `tonumber` now handles float, double, complex float, complex double, as well as integer types; and it no longer converts pointers and arrays - just like in vanilla LuaJIT.
 - `bool` is no longer serialized as `unsigned bool` - just like in vanilla LuaJIT.
 - For `CALL_WITH_LIBFFI` I no longer replace C functions with `lua_CFunction`'s that might run a bit faster but cannot be compared or converted to CData.  The trade off is now there's a separate Lua `__call` per C-function call, but now we do get casting C functions to pointers and operate on them.
+- CType objects now have `__eq`
+- All the `ffi` library arguments that could be either type or ctype objects now supports the `"$"` arguments.
 
 # Changes I've made
 
