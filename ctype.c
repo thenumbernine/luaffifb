@@ -258,6 +258,7 @@ void check_ctype(
 			CType ctarg;
 			check_ctype(L, idx+1, &ctarg);
 			push_type_name(L, idx+1, &ctarg);
+
 			char const *argname = lua_tostring(L, -1);
 //printf("argname %s\n", argname);
 			size_t argnamelen = strlen(argname);
@@ -268,7 +269,8 @@ void check_ctype(
 			memcpy(fixednamebuf + locindex + argnamelen, ctypename + locindex + 1, ctypenamelen - (locindex + 1));
 			fixednamebuf[ctypenamelen - 1 + argnamelen] = '\0';
 
-			lua_pop(L, 1);
+			lua_pop(L, 1);			// remove argname
+			lua_remove(L, idx+1);	// remove ctype that created argname
 
 //printf("fixedname %s\n", fixednamebuf);
 			lua_pushstring(L, fixednamebuf);
