@@ -244,12 +244,14 @@ void check_ctype(
 	if (lua_isstring(L, idx)) {
 		// first, replace all $'s with names of ctypes
 		for (;;) {
-			size_t slen = 0;
-			char const *s = lua_tolstring(L, idx, &slen);
-			char *loc = strchr(s, '$');
+			char const *ctypename = lua_tostring(L, idx);
+//printf("ctypename %s\n", ctypename);
+			size_t ctypenamelen = strlen(ctypename);
+//printf("ctypenamelen %ld\n", ctypenamelen);
+			char *loc = strchr(ctypename, '$');
 			if (!loc) break;
-			int locindex = loc - s;
-
+			size_t locindex = loc - ctypename;
+//printf("locindex %ld\n", locindex);
 			//check_ctype is always called with idx==1
 			//so start looking at idx==2 for our type args
 			//extra bonus points for this check_ctype to assert it is not a string
@@ -257,18 +259,21 @@ void check_ctype(
 			check_ctype(L, idx+1, &ctarg);
 			push_type_name(L, idx+1, &ctarg);
 			char const *argname = lua_tostring(L, -1);
-
+//printf("argname %s\n", argname);
 			size_t argnamelen = strlen(argname);
-			char * namebuf = malloc(slen + argnamelen + 32);
-			memcpy(namebuf, s, locindex);
-			memcpy(namebuf + locindex, argname, argnamelen);
-			memcpy(namebuf + locindex + argnamelen, namebuf + locindex + 1, slen - (locindex + 1));
-			namebuf[slen - 1 + argnamelen] = '\0';
+//printf("argnamelen %ld\n", argnamelen);
+			char * fixednamebuf = malloc(ctypenamelen + argnamelen + 32);
+			memcpy(fixednamebuf, ctypename, locindex);
+			memcpy(fixednamebuf + locindex, argname, argnamelen);
+			memcpy(fixednamebuf + locindex + argnamelen, ctypename + locindex + 1, ctypenamelen - (locindex + 1));
+			fixednamebuf[ctypenamelen - 1 + argnamelen] = '\0';
 
 			lua_pop(L, 1);
 
-			lua_pushstring(L, namebuf);
+//printf("fixedname %s\n", fixednamebuf);
+			lua_pushstring(L, fixednamebuf);
 			lua_replace(L, idx);
+			free(fixednamebuf);
 		}
 
 		Parser P = newParser(lua_tostring(L, idx));
