@@ -1,4 +1,4 @@
-#include "lua.h"
+#include "luaffifb/lua.h"
 
 int lua_absindex2(lua_State* L, int idx) {
 	return (LUA_REGISTRYINDEX <= idx && idx < 0)

@@ -6,9 +6,9 @@
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  */
-#include "ffi.h"
-#include "parser.h"
-#include "ctype.h"
+#include "luaffifb/ffi.h"
+#include "luaffifb/parser.h"
+#include "luaffifb/ctype.h"
 
 #define IS_CONST(tok) (IS_LITERAL(tok, "const") || IS_LITERAL(tok, "__const") || IS_LITERAL(tok, "__const__"))
 #define IS_VOLATILE(tok) (IS_LITERAL(tok, "volatile") || IS_LITERAL(tok, "__volatile") || IS_LITERAL(tok, "__volatile__"))

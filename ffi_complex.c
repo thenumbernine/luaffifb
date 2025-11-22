@@ -1,4 +1,4 @@
-#include "ffi_complex.h"
+#include "luaffifb/ffi_complex.h"
 
 #ifdef HAVE_COMPLEX
 

@@ -6,9 +6,9 @@
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  */
-#include "ffi.h"
-#include "ctype.h"
-#include "parser.h"
+#include "luaffifb/ffi.h"
+#include "luaffifb/ctype.h"
+#include "luaffifb/parser.h"
 
 static int to_define_key;
 

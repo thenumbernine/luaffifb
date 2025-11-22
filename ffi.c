@@ -6,11 +6,11 @@
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  */
-#include "ffi.h"
-#include "ctype.h"
-#include "parser.h"
-#include "ffi_complex.h"
-#include "call.h"
+#include "luaffifb/ffi.h"
+#include "luaffifb/ctype.h"
+#include "luaffifb/parser.h"
+#include "luaffifb/ffi_complex.h"
+#include "luaffifb/call.h"
 #include "dynasm/dasm_proto.h"
 #include <math.h>
 #include <inttypes.h>
@@ -2450,7 +2450,7 @@ static int cdata_sub(lua_State* L)
 #define DIV(l,r,s) s = l / r
 #define MOD(l,r,s) s = l % r
 #define POW(l,r,s) s = pow(l, r)
-#define IDIV(l,r,s) s = (lua_Integer)(l / r)	//TODO copy out of lua-5.4.7/src/lvm.c
+#define IDIV(l,r,s) s = (lua_Integer)(l / r)	//TODO copy out of lua-5.4.8/src/lvm.c
 #define BAND(l,r,s) s = ((lua_Integer)l & (lua_Integer)r)
 #define BOR(l,r,s) s = ((lua_Integer)l | (lua_Integer)r)
 #define BXOR(l,r,s) s = ((lua_Integer)l ^ (lua_Integer)r)

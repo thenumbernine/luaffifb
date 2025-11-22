@@ -7,10 +7,10 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-#include "ffi.h"
-#include "call.h"
-#include "parser.h"	//push_type_name
-#include "ctype.h"	// push_cdata only used by CALL_WITH_LIBFFI
+#include "luaffifb/ffi.h"
+#include "luaffifb/call.h"
+#include "luaffifb/parser.h"	//push_type_name
+#include "luaffifb/ctype.h"	// push_cdata only used by CALL_WITH_LIBFFI
 
 // has DASM_CHECKS in it which sometimes is used by the dynasm/dasc_*.h files included below
 // also has prototypes for dasm_init/dasm_free which the CALL_WITH_LIBFFI provides stub functions for
@@ -314,7 +314,7 @@ int callValuePush(
 			//ptr[0] = ret->ptr;
 			// this is the return value from libffi
 			// so I gotta copy it, right?
-			set_struct(L, -1, ptr, retCTypeUserValueLoc, &retCType, 1);
+			set_struct(L, -1, ptr, retCTypeUserValueLoc, retCType, 1);
 		}
 	default:
 		luaL_error(L, "NYI: callValuePush type=%d", retCType->type);
@@ -658,16 +658,16 @@ static void SetLastError(int err) { errno = err; }
 
 #if defined _WIN64
 #include "dynasm/dasm_x86.h"
-#include "call_x64win.h"
+#include "luaffifb/call_x64win.h"
 #elif defined __amd64__
 #include "dynasm/dasm_x86.h"
-#include "call_x64.h"
+#include "luaffifb/call_x64.h"
 #elif defined __arm__ || defined __arm || defined __ARM__ || defined __ARM || defined ARM || defined _ARM_ || defined ARMV4I || defined _M_ARM
 #include "dynasm/dasm_arm.h"
-#include "call_arm.h"
+#include "luaffifb/call_arm.h"
 #else
 #include "dynasm/dasm_x86.h"
-#include "call_x86.h"
+#include "luaffifb/call_x86.h"
 #endif
 
 typedef struct JIT_head {

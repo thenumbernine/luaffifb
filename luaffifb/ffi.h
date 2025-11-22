@@ -30,7 +30,7 @@
 #include <sys/mman.h>
 #endif
 
-#include "ffi_complex.h"
+#include "luaffifb/ffi_complex.h"
 
 #define HAVE_LONG_DOUBLE
 
@@ -217,7 +217,7 @@ enum {
 
 #define ALIGNOF(S) ((int) ((char*) &S.v - (char*) &S - 1))
 
-#include "types.h"	// CFunction
+#include "luaffifb/types.h"	// CFunction
 
 int push_user_mt(lua_State* L, int ct_usr, const CType* ct);
 int x86_return_size(lua_State* L, int usr, const CType* ct);

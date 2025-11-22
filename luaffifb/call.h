@@ -1,8 +1,8 @@
 #pragma once
 
-#include "lua.h"	//lua_State.h
-#include "types.h"	//CFunction
-#include "ffi.h"	//CType
+#include "luaffifb/lua.h"	//lua_State.h
+#include "luaffifb/types.h"	//CFunction
+#include "luaffifb/ffi.h"	//CType
 
 struct Page;		// defined in call.h, used in call.c and ffi.c
 struct DASMState;	// defined in dynasm/dasm_*.h
