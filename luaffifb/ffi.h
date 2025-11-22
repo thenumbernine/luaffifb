@@ -19,7 +19,7 @@
 #include <string.h>
 #include <assert.h>
 
-#include "lua.h"
+#include "luaffifb/lua.h"
 
 #ifdef _WIN32
 #include <windows.h>

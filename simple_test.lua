@@ -1,8 +1,12 @@
 -- I think their test.c / test.lua got too out of hand too quick
 -- so here's me easing things more slowly ...
+print'begin simple_test'
+print"require 'ffi'"
 ffi = require 'ffi'
+print"local assert = require 'ext.assert'"
 local assert = require 'ext.assert'
 
+print"ffi.cdef[["
 ffi.cdef[[
 
 int var;

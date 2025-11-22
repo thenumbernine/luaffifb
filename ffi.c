@@ -2450,7 +2450,7 @@ static int cdata_sub(lua_State* L)
 #define DIV(l,r,s) s = l / r
 #define MOD(l,r,s) s = l % r
 #define POW(l,r,s) s = pow(l, r)
-#define IDIV(l,r,s) s = (lua_Integer)(l / r)	//TODO copy out of lua-5.4.8/src/lvm.c
+#define IDIV(l,r,s) s = (lua_Integer)(l / r)	//TODO copy out of lua-5.4.7/src/lvm.c
 #define BAND(l,r,s) s = ((lua_Integer)l & (lua_Integer)r)
 #define BOR(l,r,s) s = ((lua_Integer)l | (lua_Integer)r)
 #define BXOR(l,r,s) s = ((lua_Integer)l ^ (lua_Integer)r)
@@ -4074,7 +4074,9 @@ int luaopen_ffi(lua_State* L) {
 
 	memset(lua_newuserdata(L, sizeof(JIT)), 0, sizeof(JIT)); // stack: u=userdata of JIT
 	lua_newtable(L);							// stack: u, t={}
+assert(lua_gettop(L) == 2);
 	setup_mt(L, jit_mt, 0);						// stack: u, t;  t filled with `jit_mt`
+assert(lua_gettop(L) == 2);
 	lua_setmetatable(L, -2);					// stack: u;  setmetatable(u, t)
 	setRegistry(L, &jit_key);					// stack: empty;  registry[jit_key] = u;
 

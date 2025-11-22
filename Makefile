@@ -9,12 +9,16 @@
 
 CC=clang
 
+DEBUG=1
+
 .PHONY: all
 LUA=lua
 
-CFLAGS+= -I/usr/local/include/lua-5.4.8
-LDFLAGS+= -L/usr/local/lib/lua-5.4.8
-LDFLAGS+= -llua-5.4.8
+#CFLAGS+= -I/usr/local/include/lua-5.4.7
+#CFLAGS+= -I/usr/include/lua5.4	# Ubuntu apt package for 5.4.7
+#LDFLAGS+= -L/usr/local/lib/lua-5.4.7
+#LDFLAGS+= -llua-5.4.7
+LDFLAGS+= -llua5.4
 CFLAGS+= -fPIC
 
 # use LibFFI calls
@@ -31,13 +35,13 @@ else
 	LDFLAGS+= -dynamiclib -undefined dynamic_lookup -flat_namespace
 	LIBFFI_DIR=/usr/local/Cellar/libffi/3.4.8
 	CFLAGS+= -I$(LIBFFI_DIR)/include/
-	LDFLAGS+= -L$(LIBFFI_DIR)/lib/ -lffi
+	LDFLAGS+= -L$(LIBFFI_DIR)/lib/
 endif
 
+LDFLAGS+= -lffi
 # our cwd:
 CFLAGS+= -I`pwd`
 
-DEBUG=1
 ifeq ($(DEBUG),1)
 	# debug
 	CFLAGS+= -DDEBUG -O0 -gdwarf-2 -mfix-and-continue
@@ -58,17 +62,17 @@ OBJS= $(patsubst %.c, %.o, $(SRCS))
 ffi.so: $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^
 # OSX only:
-#	install_name_tool -change liblua.5.4.8.so /usr/local/lib/lua-5.4.8/liblua.5.4.8.so $@
+#	install_name_tool -change liblua.5.4.7.so /usr/local/lib/lua-5.4.7/liblua.5.4.7.so $@
 
 libtest.so: test.o
 	$(CC) $(LDFLAGS) -o $@ $^
 # OSX only:
-#	install_name_tool -change liblua.5.4.8.so /usr/local/lib/lua-5.4.8/liblua.5.4.8.so $@
+#	install_name_tool -change liblua.5.4.7.so /usr/local/lib/lua-5.4.7/liblua.5.4.7.so $@
 
 libsimple_test.so: simple_test.o
 	$(CC) $(LDFLAGS) -o $@ $^
 # OSX only:
-#	install_name_tool -change liblua.5.4.8.so /usr/local/lib/lua-5.4.8/liblua.5.4.8.so $@
+#	install_name_tool -change liblua.5.4.7.so /usr/local/lib/lua-5.4.7/liblua.5.4.7.so $@
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $^

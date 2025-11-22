@@ -33,7 +33,6 @@ JIT* get_jit(lua_State* L) {
 
 #if defined(CALL_WITH_LIBFFI)
 
-
 // Put this in a "dynasm/dasm_wasm.h" / "call_wasm.h" to be like the other.
 // But really, this is going to be the libffi-based calling mechanism, which will work on any OS/ARCH
 
