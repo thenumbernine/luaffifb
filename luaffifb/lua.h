@@ -2,14 +2,14 @@
 
 #ifdef __cplusplus
 extern "C" {
-# include <lua5.4/lua.h>
-# include <lua5.4/lauxlib.h>
-# include <lua5.4/lualib.h>
+# include "lua5.4/lua.h"
+# include "lua5.4/lauxlib.h"
+# include "lua5.4/lualib.h"
 }
 #else
-# include <lua5.4/lua.h>
-# include <lua5.4/lauxlib.h>
-# include <lua5.4/lualib.h>
+# include "lua5.4/lua.h"
+# include "lua5.4/lauxlib.h"
+# include "lua5.4/lualib.h"
 #endif
 
 int lua_absindex2(lua_State* L, int idx);
