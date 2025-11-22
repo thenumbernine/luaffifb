@@ -667,7 +667,6 @@ void * check_typed_pointer(
 ) {
 	CType ft;
 	void* p;
-
 	to_usr = lua_absindex(L, to_usr);
 	idx = lua_absindex(L, idx);
 
@@ -707,11 +706,15 @@ void * check_typed_pointer(
 	} else if (tt->pointers != ft.pointers) {
 		type_error(L, idx, NULL, to_usr, tt);
 
+#if 0	// this is getting hit for implicit casting of Lua strings to char[]'s
+		// so rather than sort out how to just copy the const-ness across for Lua strings only
+		// I'll just disable it.
 	} else if (ft.const_mask & ~tt->const_mask) {
 		/* for every const in from it must be in to, there are further rules
 		 * for const casting (see the c++ spec), but they are hard to test
 		 * quickly */
 		type_error(L, idx, NULL, to_usr, tt);
+#endif
 	}
 
 	return p;
