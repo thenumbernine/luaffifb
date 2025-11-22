@@ -2887,6 +2887,14 @@ err:
 	return luaL_error(L, "type %s has no member %s", lua_tostring(L, -1), lua_tostring(L, 2));
 }
 
+static int ctype_eq(lua_State * L) {
+	CType a, b;
+	check_ctype(L, 1, &a);
+	check_ctype(L, 1, &b);
+	lua_pushboolean(L, !memcmp(&a, &b, sizeof(a)));
+	return 1;
+}
+
 static int cdata_tostring(lua_State * L) {
 	char buf[64];
 
@@ -3619,6 +3627,7 @@ static const luaL_Reg ctype_mt[] = {
 	{"__new", ctype_new},
 	{"__tostring", ctype_tostring},
 	{"__index", ctype_index},
+	{"__eq", ctype_eq},
 	{NULL, NULL}
 };
 
