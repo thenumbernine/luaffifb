@@ -242,6 +242,35 @@ void check_ctype(
 	CType * ct	// out
 ) {											// stack: ...
 	if (lua_isstring(L, idx)) {
+		// first, replace all $'s with names of ctypes
+		for (;;) {
+			size_t slen = 0;
+			char const *s = lua_tolstring(L, idx, &slen);
+			char *loc = strchr(s, '$');
+			if (!loc) break;
+			int locindex = loc - s;
+
+			//check_ctype is always called with idx==1
+			//so start looking at idx==2 for our type args
+			//extra bonus points for this check_ctype to assert it is not a string
+			CType ctarg;
+			check_ctype(L, idx+1, &ctarg);
+			push_type_name(L, idx+1, &ctarg);
+			char const *argname = lua_tostring(L, -1);
+
+			size_t argnamelen = strlen(argname);
+			char * namebuf = malloc(slen + argnamelen + 32);
+			memcpy(namebuf, s, locindex);
+			memcpy(namebuf + locindex, argname, argnamelen);
+			memcpy(namebuf + locindex + argnamelen, namebuf + locindex + 1, slen - (locindex + 1));
+			namebuf[slen - 1 + argnamelen] = '\0';
+
+			lua_pop(L, 1);
+
+			lua_pushstring(L, namebuf);
+			lua_replace(L, idx);
+		}
+
 		Parser P = newParser(lua_tostring(L, idx));
 		parse_type(L, &P, ct);						// stack: ..., ct's userdata's uservalue[1]
 		parse_argument(L, &P, -1, ct, NULL, NULL);	// stack: ..., ctype uservalue, ... arg uservalue or new ctype uservalue which is it?
