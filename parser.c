@@ -334,7 +334,6 @@ static int parse_enum(lua_State* L, Parser* P, CType* type)
 static void calculate_member_position(lua_State* L, Parser* P, CType* ct, CType* mt, int* pbit_offset, int* pbitfield_type)
 {
 	int bit_offset = *pbit_offset;
-
 	if (ct->type == UNION_TYPE) {
 		size_t msize;
 
@@ -1055,28 +1054,25 @@ static int parse_attribute(lua_State* L, Parser* P, Token* tok, CType* ct, Parse
 					break;
 
 				case TOK_OPEN_PAREN:
-					require_token(L, P, tok);
+					int tokenValue = (int) calculate_constant(L, P);
 
-					if (tok->type != TOK_NUMBER) {
-						luaL_error(L, "expected align(#) on line %d", P->line);
-					}
-
-					switch (tok->integer) {
+					switch (tokenValue) {
 					case 1: align = 0; break;
 					case 2: align = 1; break;
 					case 4: align = 3; break;
 					case 8: align = 7; break;
 					case 16: align = 15; break;
 					default:
-						luaL_error(L, "unsupported align size on line %d", P->line);
+						luaL_error(L, "unsupported align size %d on line %d", tokenValue, P->line);
 					}
 
-					check_token(L, P, TOK_CLOSE_PAREN, NULL, "expected align(#) on line %d", P->line);
+					check_token(L, P, TOK_CLOSE_PAREN, NULL, "align() expected closing parenthesis on line %d", P->line);
 					break;
 
 				default:
 					luaL_error(L, "expected align(#) on line %d", P->line);
 				}
+
 
 				/* __attribute__(aligned(#)) is only supposed to increase alignment */
 				ct->align_mask = max(align, ct->align_mask);

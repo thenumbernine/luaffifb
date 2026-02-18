@@ -9,6 +9,7 @@ I am forking the old luaffifb project to get it working with my [lua-ffi-wasm](h
 - For `CALL_WITH_LIBFFI` I no longer replace C functions with `lua_CFunction`'s that might run a bit faster but cannot be compared or converted to CData.  The trade off is now there's a separate Lua `__call` per C-function call, but now we do get casting C functions to pointers and operate on them.
 - CType objects now have `__eq`
 - All the `ffi` library arguments that could be either type or ctype objects now supports the `"$"` arguments.
+- `__attribute__((aligned()))` now handles expressions
 
 # Changes I've made
 
@@ -17,6 +18,8 @@ I am forking the old luaffifb project to get it working with my [lua-ffi-wasm](h
 
 # Changes I plan to make:
 
+- `__attribute__((aligned()))` only affects the first of a list, i.e. `int __attribute__((aligned(16))) a, b;` should align a and b but it only does a.
+- make "$" work for anonymous types.
 - Indexing fields that aren't there should throw exceptions.  I hate it, but I'm staying true to LuaJIT.  or maybe I shouldn't, idk...
 - CTypes can only be up to 3 pointers deep.  libjpeg breaks this.  Do like luajit and let the CType hold a pointer to the base-CType.  It's starting to look more and more like the pure-lua ffi implementation I made should just be converted over and it'll be more feature-rich than the CType/CData implementation here ... though this implementation seems to have the most superior parser.
 - Looks like comparing function-pointers was always breaking the test suite ... better fix that.

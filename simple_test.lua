@@ -66,9 +66,10 @@ typedef void (*VFP)();
 VFP test_vfp();
 void test_v_vfp(VFP f);
 VFP test_vfp_vfp(VFP f);
+
 ]]
 
-local lib = ffi.load'libsimple_test.so'
+local lib = ffi.load'./libsimple_test.so'
 
 -- TODO assert that this errors, cuz it's not, but in luajit it is:
 --ffi.new('void*', 0xdeadbeef)
