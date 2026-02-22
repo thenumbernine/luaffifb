@@ -18,15 +18,14 @@ I am forking the old luaffifb project to get it working with my [lua-ffi-wasm](h
 
 # Changes I plan to make:
 
-- get cdecl/fastcall/stdcall/thiscall working in the libffi-based calling. 
 - `__attribute__((aligned()))` only affects the first of a list, i.e. `int __attribute__((aligned(16))) a, b;` should align a and b but it only does a.
 - make "$" work for anonymous types.
 - Indexing fields that aren't there should throw exceptions.  I hate it, but I'm staying true to LuaJIT.  or maybe I shouldn't, idk...
 - CTypes can only be up to 3 pointers deep.  libjpeg breaks this.  Do like luajit and let the CType hold a pointer to the base-CType.  It's starting to look more and more like the pure-lua ffi implementation I made should just be converted over and it'll be more feature-rich than the CType/CData implementation here ... though this implementation seems to have the most superior parser.
 - Looks like comparing function-pointers was always breaking the test suite ... better fix that.
-- I still need callbacks in `CALL_WITH_LIBFFI`.
 - `#pragma pack` support.
 - Honestly I just wrote a c-header-parser in Lua, I'm now familiar with the parse syntax of C, even all the horrible parts that nobody not even Vim syntax highlighting uses, like declaring an anonymous new struct as an argument type.  I should just take my old pure-lua ffi, combine it with the parse-tree, convert it all to C++, and have my own with all the capabilities I'm looking for.  Bitflags, pragma-pack, the works.
+- get cdecl/fastcall/stdcall/thiscall working in the libffi-based calling.
 
 # Here's the original readme:
 <hr>
