@@ -9,7 +9,7 @@ I am forking the old luaffifb project to get it working with my [lua-ffi-wasm](h
 - For `CALL_WITH_LIBFFI` I no longer replace C functions with `lua_CFunction`'s that might run a bit faster but cannot be compared or converted to CData.  The trade off is now there's a separate Lua `__call` per C-function call, but now we do get casting C functions to pointers and operate on them.
 - CType objects now have `__eq`
 - All the `ffi` library arguments that could be either type or ctype objects now supports the `"$"` arguments.
-- `__attribute__((aligned()))` now handles expressions
+- `__attribute__((aligned()))` now handles expressions.
 
 # Changes I've made
 
