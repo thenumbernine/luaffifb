@@ -36,6 +36,7 @@ enum etoken {
 	TOK_DOT, TOK_AMPERSAND, TOK_LOGICAL_NOT, TOK_BITWISE_NOT, TOK_MINUS,
 	TOK_PLUS, TOK_STAR, TOK_DIVIDE, TOK_MODULUS, TOK_LESS,
 	TOK_GREATER, TOK_BITWISE_XOR, TOK_BITWISE_OR, TOK_QUESTION, TOK_POUND,
+	TOK_DOLLARSIGN,	// used for type args
 
 	TOK_REFERENCE = TOK_AMPERSAND,
 	TOK_MULTIPLY = TOK_STAR,
@@ -50,12 +51,39 @@ typedef struct Token {
 } Token;
 
 
-Parser newParser(char const * str) {
+/*
+called by:
+- ffi_cdef <- ffi.cdef()
+- add_typedef <- used internally for some initial typedefs
+- check_ctype
+	- ffi_typeof <- ffi.typeof	<- CAN use $'s
+	- do_new <- ffi.new			<- CANNOT use $'s
+	- ctype_call <- I guess this is a ctype obj's __call() operator, but when can that happen with a string arg first?
+								so it is CANNOT use $'s as well
+	- ffi_sizeof / ffi.sizeof	<- CANNOT use $'s
+	- ffi_alignof / ffi.alignof	<- CANNOT use $'s
+	- ffi_offsetof / ffi.offsetof <- CANNOT use $'s
+	- ffi_istype / ffi.istype	<- idk honestly I couldn't get it to work
+	- ffi_metatype / ffi.metatype <- I'll just guess CANNOT
+	- ctype_tostring <- I'll say no, it is internal
+	- ctype_index <- no, internal
+	- ctype_eq <- no, internal
+
+convention: typeParamStartLoc == 0 means we are not parsing $ args
+*/
+Parser newParser(lua_State *L, char const * str, int typeParamStartLoc) {
+	assert(typeParamStartLoc >= 0);	//don't use relative values ever for this one
+//printf("newParser(str=\"%s\", typeParamStartLoc=%d)\n", str, typeParamStartLoc);
+	int numTypeParams = typeParamStartLoc == 0 ? 0 : lua_gettop(L)+1-typeParamStartLoc;
+//printf("numTypeParams=%d\n", numTypeParams);
 	return (Parser){
 		.line = 1,
 		.next = str,
 		.prev = str,
 		.align_mask = DEFAULT_ALIGN_MASK,
+		.numTypeParams = numTypeParams,
+		.typeParamStartLoc = typeParamStartLoc,
+		.typeParamIndex = 0,
 	};
 }
 
@@ -79,7 +107,8 @@ static char tok1[] = {
 	'=', '(', ')', '[', ']',
 	'.', '&', '!', '~', '-',
 	'+', '*', '/', '%', '<',
-	'>', '^', '|', '?', '#'
+	'>', '^', '|', '?', '#',
+	'$'
 };
 
 static int next_token(lua_State* L, Parser* P, Token* tok)
@@ -220,7 +249,7 @@ static int next_token(lua_State* L, Parser* P, Token* tok)
 		goto end;
 
 	} else {
-		return luaL_error(L, "invalid character %d", P->line);
+		return luaL_error(L, "invalid character %c in line %d", *s, P->line);
 	}
 
 end:
@@ -233,7 +262,7 @@ end:
 static void require_token_line(lua_State* L, Parser* P, Token* tok, const char* file, int line)
 {
 	if (!next_token(L, P, tok)) {
-		luaL_error(L, "unexpected end on line %s:%d", file, line);
+		luaL_error(L, "unexpected end of line %s:%d", file, line);
 	}
 }
 
@@ -1202,10 +1231,35 @@ void parse_type(
 	Token tok;
 	require_token(L, P, &tok);
 
+	if (tok.type == TOK_DOLLARSIGN) {
+//printf("here requesting a type param with lua top %d\n", lua_gettop(L));
+		// use our type params
+		//require_token(L, P, &tok);
+
+		if (P->typeParamIndex >= P->numTypeParams) {
+			luaL_error(L, "wrong number of type parameters");
+		}
+		int typeLuaLoc = P->typeParamStartLoc + P->typeParamIndex;
+		P->typeParamIndex++;
+
+		// convert *this* arg from a type
+		// it had better be a type
+		// actually check_ctype could be string, and could be recurisve call,
+		// so lets make sure up front
+		if (lua_isstring(L, typeLuaLoc)) {
+			luaL_error(L, "declaration specifier expected somewhere or something");
+		}
+
+int top = lua_gettop(L);
+		check_ctype(L, typeLuaLoc, ct, 0);	// don't do args for args
+assert(lua_gettop(L) == top+1);
+		return;
+	}
+
 	// get const/volatile before the base type
 	for (;;) {
 		if (tok.type != TOK_TOKEN) {
-			luaL_error(L, "unexpected value before type name on line %d", P->line);
+			luaL_error(L, "unexpected token %d before type name on line %d", tok.type, P->line);
 			return;
 		} else if (IS_CONST(tok)) {
 			ct->const_mask = 1;
@@ -1228,7 +1282,7 @@ void parse_type(
 
 	// get base type
 	if (tok.type != TOK_TOKEN) {
-		luaL_error(L, "unexpected value before type name on line %d", P->line);
+		luaL_error(L, "unexpected token %d before type name on line %d", tok.type, P->line);
 		return;
 	} else if (IS_LITERAL(tok, "struct")) {
 		ct->type = STRUCT_TYPE;
@@ -2230,9 +2284,13 @@ static int parse_root(lua_State* L, Parser* P)
 	return END;
 }
 
-int ffi_cdef(lua_State* L)
-{
-	Parser P = newParser(luaL_checkstring(L, 1));
+/*
+same rule as ffi.typeof:
+args 2..n *must be* ctypes
+and the # of args *must* match the # of variables in the type string
+*/
+int ffi_cdef(lua_State* L) {
+	Parser P = newParser(L, luaL_checkstring(L, 1), 2);
 
 	if (parse_root(L, &P) == PRAGMA_POP) {
 		luaL_error(L, "pragma pop without an associated push on line %d", P.line);

@@ -239,49 +239,25 @@ And how come it's casting cdata_mt_key's as CType?
 void check_ctype(
 	lua_State* L,
 	int idx,
-	CType * ct	// out
+	CType * ct,	// out
+	int typeParamStartLoc		// start of stack to have type-params, 0 == don't allow $ type param parsing
 ) {											// stack: ...
+int top = lua_gettop(L);
 	if (lua_isstring(L, idx)) {
-		// first, replace all $'s with names of ctypes
-		for (;;) {
-			char const *ctypename = lua_tostring(L, idx);
-//printf("ctypename %s\n", ctypename);
-			size_t ctypenamelen = strlen(ctypename);
-//printf("ctypenamelen %ld\n", ctypenamelen);
-			char *loc = strchr(ctypename, '$');
-			if (!loc) break;
-			size_t locindex = loc - ctypename;
-//printf("locindex %ld\n", locindex);
-			//check_ctype is always called with idx==1
-			//so start looking at idx==2 for our type args
-			//extra bonus points for this check_ctype to assert it is not a string
-			CType ctarg;
-			check_ctype(L, idx+1, &ctarg);
-			push_type_name(L, idx+1, &ctarg);
 
-			char const *argname = lua_tostring(L, -1);
-//printf("argname %s\n", argname);
-			size_t argnamelen = strlen(argname);
-//printf("argnamelen %ld\n", argnamelen);
-			char * fixednamebuf = malloc(ctypenamelen + argnamelen + 32);
-			memcpy(fixednamebuf, ctypename, locindex);
-			memcpy(fixednamebuf + locindex, argname, argnamelen);
-			memcpy(fixednamebuf + locindex + argnamelen, ctypename + locindex + 1, ctypenamelen - (locindex + 1));
-			fixednamebuf[ctypenamelen - 1 + argnamelen] = '\0';
-
-			lua_pop(L, 1);			// remove argname
-			lua_remove(L, idx+1);	// remove ctype that created argname
-
-//printf("fixedname %s\n", fixednamebuf);
-			lua_pushstring(L, fixednamebuf);
-			lua_replace(L, idx);
-			free(fixednamebuf);
-		}
-
-		Parser P = newParser(lua_tostring(L, idx));
+//printf("check_ctype(str=\"%s\" top=%d)\n", lua_tostring(L, idx), lua_gettop(L));
+		Parser P = newParser(
+			L,
+			lua_tostring(L, idx),	// string to convert
+			typeParamStartLoc		// stack location of 1st arg.  TODO check all calls to make sure it is in fact always right after idx
+		);
+assert(lua_gettop(L) == top);
 		parse_type(L, &P, ct);						// stack: ..., ct's userdata's uservalue[1]
+assert(lua_gettop(L) == top+1);
 		parse_argument(L, &P, -1, ct, NULL, NULL);	// stack: ..., ctype uservalue, ... arg uservalue or new ctype uservalue which is it?
+assert(lua_gettop(L) == top+2);
 		lua_remove(L, -2); 							// stack: ..., parse_argument returned uservalue
+assert(lua_gettop(L) == top+1);
 		return;
 	}
 
@@ -292,9 +268,12 @@ void check_ctype(
 		)
 	) {													// stack: ..., getmetatable(stack[idx])
 		lua_pop(L, 1); 									// stack: ...
+assert(lua_gettop(L) == top);
 		// wait ... if it's a cdata ... then treat its userdata as a struct type ... why?
 		*ct = *(CType*)lua_touserdata(L, idx);	// stack: ...
+assert(lua_gettop(L) == top);
 		lua_getuservalue(L, idx);						// stack: ..., stack[idx]'s uservalue[1]
+assert(lua_gettop(L) == top+1);
 		return;
 	}
 

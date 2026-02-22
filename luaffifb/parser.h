@@ -5,12 +5,15 @@ typedef struct {
 	char const * next;
 	char const * prev;
 	unsigned align_mask;
+	int numTypeParams;
+	int typeParamStartLoc;		// lua stack loc
+	int typeParamIndex;	// 0-based
 } Parser;
 
 //forward-declared here for parse_argument's prototype even though its arg is only ever passed NULL so the outside never sees it.
 struct Token;
 
-Parser newParser(char const * str);
+Parser newParser(lua_State *L, char const * str, int argLoc);
 
 void parse_type(
 	lua_State * L,

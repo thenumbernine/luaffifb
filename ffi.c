@@ -1200,10 +1200,15 @@ err:
 	type_error(L, idx, NULL, to_usr, tt);
 }
 
-static int ffi_typeof(lua_State* L)
-{
+/*
+if arg 1 is a ctype, returns the ctype
+if arg 1 is a string...
+	then args 2..n *must be* ctypes
+	and the # of args *must* match the # of variables in the type string
+*/
+static int ffi_typeof(lua_State* L) {
 	CType ct;
-	check_ctype(L, 1, &ct);
+	check_ctype(L, 1, &ct, 2); // 1st arg is string, rest of args are type params
 	push_ctype(L, -1, &ct);
 	return 1;
 }
@@ -1278,7 +1283,7 @@ static int do_new(
 	int is_cast
 ) {													// stack: typedesc, args...
 	CType ct;
-	check_ctype(L, 1, &ct);							// stack: typedesc, args..., typedesc's CType's uservalue[1]
+	check_ctype(L, 1, &ct, 0);						// stack: typedesc, args..., typedesc's CType's uservalue[1]
 
 	// don't push a callback when we have a c function, as cb:set needs a
 	// compiled callback from a lua function to work
@@ -1291,11 +1296,11 @@ static int do_new(
 		if (get_cfunction_address(L, 2, &func)) {	// stack: typedesc, args..., typedesc's CType's uservalue[1]
 			void * p = push_cdata(L, -1, &ct);		// stack: typedesc, args..., typedesc's CType's uservalue[1], userdata of CData of CType ct
 			*(CFunction *)p = func;
-			return 1;								// return the userdata of CData of CType ct 
+			return 1;								// return the userdata of CData of CType ct
 		}
 		// Function cdatas are pinned and must be manually cleaned up by calling func:free()
 													// stack: typedesc, args..., typedesc's CType's uservalue[1]
-//printf("do_new compile_callback\n");		
+//printf("do_new compile_callback\n");
 		CFunction closureCDataPtr = compile_callback(L, 2, -1, &ct);	// stack: typedesc, args..., typedesc's CType's uservalue[1], CData of libffi-closure
 #if 0
 printf("do_new got closureCDataPtr=%p\n", closureCDataPtr);
@@ -1383,7 +1388,7 @@ static int ctype_call(lua_State* L) {
 	CType ct;
 	int top = lua_gettop(L);
 
-	check_ctype(L, 1, &ct);
+	check_ctype(L, 1, &ct, 0);
 
 	if (push_user_mt(L, -1, &ct)) {
 		lua_pushstring(L, "__new");
@@ -1405,7 +1410,7 @@ static int ctype_call(lua_State* L) {
 static int ffi_sizeof(lua_State* L)
 {
 	CType ct;
-	check_ctype(L, 1, &ct);
+	check_ctype(L, 1, &ct, 0);
 	get_variable_array_size(L, 2, &ct);
 	lua_pushinteger(L, ctype_size(L, &ct));
 	return 1;
@@ -1415,7 +1420,7 @@ static int ffi_alignof(lua_State* L)
 {
 	CType ct, mt;
 	lua_settop(L, 2);
-	check_ctype(L, 1, &ct);
+	check_ctype(L, 1, &ct, 0);
 
 	/* if no member is specified then we return the alignment of the type */
 	if (lua_isnil(L, 2)) {
@@ -1439,7 +1444,7 @@ static int ffi_offsetof(lua_State* L)
 	ptrdiff_t off;
 	CType ct, mt;
 	lua_settop(L, 2);
-	check_ctype(L, 1, &ct);
+	check_ctype(L, 1, &ct, 0);
 
 	lua_pushvalue(L, 2);
 	off = get_member(L, -2, &ct, &mt); /* this replaces the member key at -1 with the mbr usr value */
@@ -1463,7 +1468,7 @@ static int ffi_istype(
 	lua_State* L
 ) {							// stack: typedesc, obj
 	CType tt;
-	check_ctype(L, 1, &tt);	// stack: typedesc, obj, ttuv = typedesc's CType userdata's uservalue[1]
+	check_ctype(L, 1, &tt, 0);	// stack: typedesc, obj, ttuv = typedesc's CType userdata's uservalue[1]
 
 	CType ft;
 	to_cdata(L, 2, &ft);	// stack: typedesc, obj, ttuv, objuv = obj's CType userdata's uservalue[1]
@@ -1659,7 +1664,7 @@ static int ffi_metatype(lua_State* L)
 	CType ct;
 	lua_settop(L, 2);
 
-	check_ctype(L, 1, &ct);
+	check_ctype(L, 1, &ct, 0);
 	if (lua_type(L, 2) != LUA_TTABLE && lua_type(L, 2) != LUA_TNIL) {
 		return luaL_argerror(L, 2, "metatable must be a table or nil");
 	}
@@ -2854,7 +2859,7 @@ static int ctype_tostring(lua_State* L)
 	CType ct;
 	assert(lua_type(L, 1) == LUA_TUSERDATA);
 	lua_settop(L, 1);
-	check_ctype(L, 1, &ct);
+	check_ctype(L, 1, &ct, 0);
 	assert(lua_gettop(L) == 2);
 	push_type_name(L, -1, &ct);
 	lua_pushfstring(L, "ctype<%s>", lua_tostring(L, -1));
@@ -2871,7 +2876,7 @@ static int ctype_tostring(lua_State* L)
 static int ctype_index(lua_State * L) {
 	CType ct;
 	assert(lua_type(L, 1) == LUA_TUSERDATA);
-	check_ctype(L, 1, &ct);
+	check_ctype(L, 1, &ct, 0);
 
 	// taken from cdata_index
 
@@ -2905,8 +2910,8 @@ err:
 
 static int ctype_eq(lua_State * L) {
 	CType a, b;
-	check_ctype(L, 1, &a);
-	check_ctype(L, 1, &b);
+	check_ctype(L, 1, &a, 0);
+	check_ctype(L, 1, &b, 0);
 	lua_pushboolean(L, !memcmp(&a, &b, sizeof(a)));
 	return 1;
 }
@@ -3753,7 +3758,7 @@ static void add_typedef(
 	const char* from,
 	const char* to
 ) {												// stack: ...
-	Parser P = newParser(from);
+	Parser P = newParser(L, from, 0); // 0 == don't use type params, since this is just used internally here for some quick typedefs and there's no $'s in the typedef strings
 
 	pushRegistry(L, &types_key);				// stack: ..., registry[&types_key]
 	CType ct;
