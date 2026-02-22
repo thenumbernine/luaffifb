@@ -788,9 +788,7 @@ static CFunction check_cfunction(lua_State* L, int idx, int to_usr, const CType*
 
 		// Function cdatas are pinned and must be manually cleaned up by calling func:free().
 		pushRegistry(L, &callbacks_key);
-printf("check_cfunction compiling callback\n");		
 		f = compile_callback(L, idx, to_usr, tt);
-printf("check_cfunction got result %p\n", f);		
 		lua_pushboolean(L, 1);
 		lua_rawset(L, -3);
 		lua_pop(L, 1); /* callbacks tbl */
@@ -1298,12 +1296,12 @@ static int do_new(
 		// Function cdatas are pinned and must be manually cleaned up by calling func:free()
 													// stack: typedesc, args..., typedesc's CType's uservalue[1]
 //printf("do_new compile_callback\n");		
-		CFunction * closureCDataPtr = compile_callback(L, 2, -1, &ct);	// stack: typedesc, args..., typedesc's CType's uservalue[1], CData of libffi-closure
+		CFunction closureCDataPtr = compile_callback(L, 2, -1, &ct);	// stack: typedesc, args..., typedesc's CType's uservalue[1], CData of libffi-closure
 #if 0
-printf("do_new got closureCDataPtr=%p, *closureCDataPtr=%p\n", closureCDataPtr, *closureCDataPtr);
+printf("do_new got closureCDataPtr=%p\n", closureCDataPtr);
 printf("can I call it?\n");
 typedef int (*TEMPFUNC)(char const *);
-TEMPFUNC f = (TEMPFUNC)closureCDataPtr[0];
+TEMPFUNC f = (TEMPFUNC)closureCDataPtr;
 int cfuncResult = f("testing from luaffifb");
 printf("cfuncResult %d\n", cfuncResult);
 

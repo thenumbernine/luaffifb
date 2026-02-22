@@ -660,7 +660,7 @@ DEBUGPRINT("compile_callback\n");
 assert(lua_type(L, funcCTypeUserValueLoc) == LUA_TTABLE);	// type is 5 .... is a table
 
 	// cdata of the c-function that's gonna call the libffi closure
-	CFunction * pf = (CFunction*)push_cdata(L, funcCTypeUserValueLoc, ct);	// stack: ..., CData of funcptr to libffi closure
+	void ** pf = (void**)push_cdata(L, funcCTypeUserValueLoc, ct);	// stack: ..., CData of funcptr to libffi closure
 DEBUGPRINT("push_cdata pf=%p *pf=%p\n", pf, *pf);
 
 	// TODO only allocate once, hence the name of the function, but I will get this working first.
@@ -698,7 +698,7 @@ DEBUGPRINT("retType %p\n", userData->retType);
 	int result = ffi_prep_cif(&userData->cif, FFI_DEFAULT_ABI, nargs, userData->retType, userData->argTypes);
 	if (result != FFI_OK) luaL_error(L, "ffi_prep_cif failed with %d\n", result);
 
-	result = ffi_prep_closure_loc(closure, &userData->cif, callCToLuaWithLibFFI, userData, pf);
+	result = ffi_prep_closure_loc(closure, &userData->cif, callCToLuaWithLibFFI, userData, pf[0]);
 	if (result != FFI_OK) luaL_error(L, "ffi_prep_closure_loc failed with %d\n", result);
 
 // TODO I'm leaking for now, FIXME, use userdata and put it in a lua closure
@@ -731,7 +731,7 @@ DEBUGPRINT("retType %p\n", userData->retType);
 DEBUGPRINT("pushing pf=%p, *pf=%p\n", pf, *pf);
 
 	assert(lua_gettop(L) == top + 1);
-	return pf;															// stack: ..., func CData userdata
+	return (CFunction)pf[0];															// stack: ..., func CData userdata
 }
 
 
