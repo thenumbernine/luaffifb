@@ -554,15 +554,88 @@ DEBUGPRINT("compile_function() DONE\n\n");
 }
 
 
-/*
-upvalue[1] = the function's CData userdata's CType userdata's uservalue[1] ... which describes the C function
-upvalue[2] = the Lua function
-*/
-int callCToLuaWithLibFFI(
-	lua_State * L
+// what to put here...
+// where to put it ...
+typedef struct CCallbackUserData {
+	lua_State * L;
+	CType * ctype;
+	int nargs;	// TODO get this from the CType ... which is in lua I guess or somethign
+	ffi_type * ffiReturnType;
+	ffi_type ** ffiArgTypes;	// allocated with malloc
+	ffi_cif cif;
+	ffi_closure * closure;		// alloc'd with ffi_closure_alloc
+} CCallbackUserData;
+
+static void callCToLuaWithLibFFI(
+	ffi_cif * cif,
+	void *ffiReturnPtr,
+	void **ffiArgPtrs,
+	void *userData_
 ) {
-	luaL_error(L, "TODO");
-	return 0;
+	// stack: ...
+	CCallbackUserData * userData = (CCallbackUserData *)userData_;
+printf("in libffi closure C callback with userdata %p\n", userData);
+	lua_State *L = userData->L;
+	int top = lua_gettop(L);
+	lua_pushlightuserdata(L, userData);	// stack: ..., c-closure userData
+assert(lua_gettop(L) == top+1);	
+	lua_rawget(L, LUA_REGISTRYINDEX);	// stack: ..., table of func info with t[1] == the func, and t[2] == the uservalue of the function ctype 
+printf("registry[%p] has type %d\n", userData, lua_type(L, -1));
+assert(lua_gettop(L) == top+1);	
+	assert(lua_type(L, -1) == LUA_TTABLE);
+	lua_rawgeti(L, -1, 2);				// stack: ..., func info table, lua func ctype uservalue
+assert(lua_gettop(L) == top+2);	
+	assert(lua_type(L, -1) == LUA_TTABLE);	// funcCTypeUserValueLoc is a table
+	lua_rawgeti(L, -2, 1);				// stack: ..., func info table, lua func ctype uservalue, lua func
+assert(lua_gettop(L) == top+3);	
+	assert(lua_type(L, -1) == LUA_TFUNCTION);
+	lua_remove(L, -3);					// stack: ..., lua func ctype uservalue, lua func
+assert(lua_gettop(L) == top+2);	
+
+	// is "funcCTypeUserValueLoc" same as "ctypeUserValueLoc" in callLuaToCWithLibFFI ?
+	int funcCTypeUserValueLoc = lua_gettop(L)-1;
+
+	// TODO get this from the ctype hidden in Lua somewhere
+	int nargs = userData->nargs;
+
+	// 1) push the lua values
+	for (int i = 1; i <= nargs; ++i) {
+		lua_rawgeti(L, funcCTypeUserValueLoc, i);						// stack: ..., lua func ctype uservalue, lua func, (prev arg Lua values...), i'th arg ctype uservalue (right?)
+		CType const * argCType = (CType const *)lua_touserdata(L, -1);	// stack: ..., lua func ctype uservalue, lua func, (prev arg Lua values...), i'th arg ctype uservalue (right?)
+		lua_getuservalue(L, -1);										// stack: ..., lua func ctype uservalue, lua func, (prev arg Lua values...), i'th arg ctype uservalue, arg ctype uservalue userdata
+		lua_remove(L, -2);												// stack: ..., lua func ctype uservalue, lua func, (prev arg Lua values...), arg ctype uservalue userdata
+		int argCTypeUserValueLoc = lua_gettop(L);
+	
+		int result = callValuePush(L, argCType, argCTypeUserValueLoc, ffiArgPtrs[i-1]);	// stack: ..., lua func ctype uservalue, lua func, (prev arg Lua values...), arg ctype uservalue userdata, arg lua value
+		assert(result == 1); // except void and ... structs ?!?!?!?
+		lua_remove(L, -2);	// stack: ..., lua func ctype uservalue, lua func, (prev arg Lua values...), arg lua value
+		assert(lua_gettop(L) == top+2+i);	
+	}
+	assert(lua_gettop(L) == top+2+nargs);
+
+	int nres = userData->ffiReturnType == &ffi_type_void ? 0 : 1;
+
+	// 2) call
+	lua_call(L, nargs, nres);
+	assert(lua_gettop(L) == top+1+nres);						// stack: ..., lua func ctype uservalue, [lua result]
+
+	// 3) pop result
+	if (nres) {													// stack: ..., lua func ctype uservalue, lua result
+		int retValLoc = lua_gettop(L);
+		lua_rawgeti(L, funcCTypeUserValueLoc, 0);				// stack: ..., lua func ctype uservalue, lua result, return type's CType's userdata
+		CType const * retCType = (CType const *)lua_touserdata(L, -1);
+		lua_getuservalue(L, -1);								// stack: ..., lua func ctype uservalue, lua result, return type's CType's userdata, return type's CType's userdata's uservalue[1]
+		int retCTypeUserValueLoc = lua_gettop(L);
+		
+		// can I copy directly to ffiResultPtr or do I need to pass a pointer to a pointer?
+		luaToCallValue(L, retValLoc, retCType, retCTypeUserValueLoc, ffiReturnPtr);
+		lua_pop(L, 3);
+	}
+	assert(lua_gettop(L) == top+1);
+	lua_pop(L, 1);
+	assert(lua_gettop(L) == top);
+
+	printf("DONE!\n");
 }
 
 /*
@@ -575,37 +648,90 @@ so cdata_call will have to support the
 *) new closures-of-CFunctions in compile_functin() TBD
 */
 CFunction compile_callback(
-	lua_State* L,
-	int luaFuncLoc,
-	int funcCTypeUserValueLoc,
-	CType const * ct
+	lua_State* L,				// Lua state
+	int luaFuncLoc,				// where on the Lua stack the function is
+	int funcCTypeUserValueLoc,	// where on the Lua stack the function's ctype is
+	CType const * ct			// CType of function's ... ctype .. ? again? 
 ) {									// stack: ...
+printf("compile_callback\n");
+int top = lua_gettop(L);	
 	funcCTypeUserValueLoc = lua_absindex(L, funcCTypeUserValueLoc);
+assert(lua_type(L, funcCTypeUserValueLoc) == LUA_TTABLE);	// type is 5 .... is a table 
 
-	CFunction * pf = (CFunction*)push_cdata(L, funcCTypeUserValueLoc, ct);	// stack: ..., func CData userdata
+	// cdata of the c-function that's gonna call the libffi closure
+	CFunction * pf = (CFunction*)push_cdata(L, funcCTypeUserValueLoc, ct);	// stack: ..., CData of funcptr to libffi closure
+printf("push_cdata pf=%p *pf=%p\n", pf, *pf);
 
-	// TODO don't do this, this is the function-pointer that is used for comparing things
-	// or maybe callbacks should be a different type from FUNCTION_TYPE and maybe FUNCTION_PTR_TYPE shouldn't be different from FUNCTION_TYPE ...
-	// or worse: HOW CAN C KNOW WHAT TO CALL?!
-	// TODO for this to work, we need a wasm-friendly way to make a wholly new C function and push the pointer here.
-	//luaL_error(L, "TODO callback");
-fprintf(stderr, "!!!DANGER!!! Callbacks are not implemented, passing a null function, let's hope nobody calls it!\n");	
-	pf[0] = NULL;
-	//pf[0] = callCToLuaWithLibFFI;	// compile function ... which converts the C->Lua args, calls, and converts Lua->C return type.
-									// now how do I save extra data for the conversion to handle?  the old luaffifb way was to make a wholly new function ...
-#if 0
-	// Maybe I'll just do like I see everywhere else and cross my fingers:
-	// That is: set the CType's userdata's uservalue[1]'s table entry with this new data as the key!
+	// TODO only allocate once, hence the name of the function, but I will get this working first.
+	// copying from here for now: https://gist.github.com/TooTallNate/1575877
+	size_t nargs = lua_rawlen(L, funcCTypeUserValueLoc);
+printf("nargs %ld\n", nargs);
 
-	lua_pushvalue(L, funcCTypeUserValueLoc);			// stack: ..., cdata, uv
-	lua_pushvalue(L, luaFuncLoc);					// stack: ..., cdata, uv, luafunc
-	lua_pushcclosure(L, callCToLuaWithLibFFI, 1);	// stack: ..., cdata, callCToLuaWithLibFFI;  ... with upvalues = {CType uservalue, luafunc}
+	ffi_closure * closure = ffi_closure_alloc(sizeof(ffi_closure), pf);
+	if (!closure) luaL_error(L, "ffi_closure_alloc failed\n");
+printf("ffi_closure_alloc *pf=%p\n", *pf);
 
-	lua_pushvalue(L, -2);						// stack: ..., cdata, callCToLuaWithLibFFI, cdata
-	lua_insert(L, -2);							// stack: ..., cdata, cdata, callCToLuaWithLibFFI
-	lua_rawset(L, funcCTypeUserValueLoc);			// stack: ..., cdata;  uv[cdata] = callCToLuaWithLibFFI
-#endif
-	return *pf;
+	ffi_type **argTypes = (ffi_type **)malloc(nargs * sizeof(ffi_type*));
+	if (!argTypes) luaL_error(L, "malloc failed\n");
+	for (int i = 1; i <= nargs; ++i) {
+		lua_rawgeti(L, funcCTypeUserValueLoc, i);						// stack: ..., CData of funcptr to libffi closure, ctypeUserVal[i]
+		CType const * argCType = (CType const *)lua_touserdata(L, -1);
+		argTypes[i-1] = getFFITypeForCType(L, argCType);
+printf("argTypes[%d] = %p\n", i-1, argTypes[i-1]);
+		lua_pop(L, 1);													// stack: ..., CData of funcptr to libffi closure
+	}
+	lua_rawgeti(L, funcCTypeUserValueLoc, 0);							// stack: ..., CData of funcptr to libffi closure, ctypeUserVal[0]
+	CType const * retCType = (CType const *)lua_touserdata(L, -1);
+	ffi_type * retType = getFFITypeForCType(L, retCType);
+printf("retType %p\n", retType);	
+	lua_pop(L, 1);														// stack: ..., CData of funcptr to libffi closure
+
+
+	CCallbackUserData * userData = (CCallbackUserData *)lua_newuserdata(L, sizeof(CCallbackUserData)); 	// stack: ..., CData of funcptr to libffi closure, closure C-func userData
+	userData->L = L;
+	userData->ctype = ct;
+	userData->nargs = nargs;
+	userData->ffiReturnType = retType;
+	userData->ffiArgTypes = argTypes;	// malloc'd
+	userData->closure = closure;
+
+	int result = ffi_prep_cif(&userData->cif, FFI_DEFAULT_ABI, nargs, retType, argTypes);
+	if (result != FFI_OK) luaL_error(L, "ffi_prep_cif failed with %d\n", result);
+	
+	result = ffi_prep_closure_loc(closure, &userData->cif, callCToLuaWithLibFFI, userData, pf);
+	if (result != FFI_OK) luaL_error(L, "ffi_prep_closure_loc failed with %d\n", result);
+
+// TODO I'm leaking for now, FIXME, use userdata and put it in a lua closure
+// INSTEAD, ALLOCATE IT ALL WITH lua_newuserdata AND SAVE IT TO THE CFUNCTION CCLOSURE WHATEVER
+
+	assert(lua_type(L, -1) == LUA_TUSERDATA);
+
+	// set registry[userdata] = info so that we can retrieve it with the userdata
+	lua_newtable(L);					// stack: ..., CData of funcptr to libffi closure, closure C-func userData, t
+	assert(lua_type(L, -1) == LUA_TTABLE);
+	
+	lua_pushvalue(L, luaFuncLoc);		// stack: ..., CData of funcptr to libffi closure, closure C-func userData, t, lua func 
+	assert(lua_type(L, -1) == LUA_TFUNCTION);
+	lua_rawseti(L, -2, 1);				// stack: ..., CData of funcptr to libffi closure, closure C-func userData, t;   t[1] = lua func
+	assert(lua_type(L, -1) == LUA_TTABLE);
+	
+	lua_pushvalue(L, funcCTypeUserValueLoc);// stack: ..., CData of funcptr to libffi closure, closure C-func userData, t, funcCTypeUserValue
+	assert(lua_type(L, -1) == LUA_TTABLE);	//funcCTypeUserValueLoc is a table
+	lua_rawseti(L, -2, 2);				// stack: ..., CData of funcptr to libffi closure, closure C-func userData, t;   t[2] = funcCTypeUserValue
+	assert(lua_type(L, -1) == LUA_TTABLE);
+
+	lua_pushlightuserdata(L, userData);		// stack: ..., CData of funcptr to libffi closure, closure C-func userData, t, lightuserdata of closure C-func userData
+	lua_insert(L, -2);						// stack: ..., CData of funcptr to libffi closure, closure C-func userData, lightuserdata of closure C-func userData, t
+	assert(lua_type(L, -2) == LUA_TLIGHTUSERDATA);
+	assert(lua_type(L, -1) == LUA_TTABLE);
+	lua_rawset(L, LUA_REGISTRYINDEX);		// stack: ..., CData of funcptr to libffi closure, closure C-func userData;  regsitry[lightuserdata of closure C-func userData] = t 
+
+	lua_pop(L, 1);	// pop userdata ...  stack: ..., CData of funcptr to libffi closure
+
+printf("pushing pf=%p, *pf=%p\n", pf, *pf);
+
+	assert(lua_gettop(L) == top + 1);
+	return pf;															// stack: ..., func CData userdata
 }
 
 

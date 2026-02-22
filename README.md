@@ -18,6 +18,7 @@ I am forking the old luaffifb project to get it working with my [lua-ffi-wasm](h
 
 # Changes I plan to make:
 
+- get cdecl/fastcall/stdcall/thiscall working in the libffi-based calling. 
 - `__attribute__((aligned()))` only affects the first of a list, i.e. `int __attribute__((aligned(16))) a, b;` should align a and b but it only does a.
 - make "$" work for anonymous types.
 - Indexing fields that aren't there should throw exceptions.  I hate it, but I'm staying true to LuaJIT.  or maybe I shouldn't, idk...
