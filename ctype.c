@@ -252,7 +252,7 @@ int top = lua_gettop(L);
 			typeParamStartLoc		// stack location of 1st arg.  TODO check all calls to make sure it is in fact always right after idx
 		);
 assert(lua_gettop(L) == top);
-		parse_type(L, &P, ct);						// stack: ..., ct's userdata's uservalue[1]
+		*ct = parse_type(L, &P);						// stack: ..., ct's userdata's uservalue[1]
 assert(lua_gettop(L) == top+1);
 		parse_argument(L, &P, -1, ct, NULL, NULL);	// stack: ..., ctype uservalue, ... arg uservalue or new ctype uservalue which is it?
 assert(lua_gettop(L) == top+2);

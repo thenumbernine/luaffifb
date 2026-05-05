@@ -236,7 +236,7 @@ static int next_token(lua_State* L, Parser* P, Token* tok)
 		goto end;
 
 	} else if (('a' <= *s && *s <= 'z') || ('A' <= *s && *s <= 'Z') || *s == '_') {
-		/* tokens */
+		// tokens
 		tok->type = TOK_TOKEN;
 		tok->str = s;
 
@@ -624,9 +624,14 @@ static int parse_struct(lua_State* L, Parser* P, int tmp_usr, const CType* ct)
 		 * mname is 'bar' then 'bar2'
 		 */
 
-		parse_type(L, P, &mbase);
+		mbase = parse_type(L, P);
 
-		for (;;) {
+		// if struct-packed is defined then define the field packed too
+		// is this how struct-packed vs field-packed works?
+		mbase.is_packed = ct->is_packed;
+		mbase.align_mask = ct->align_mask;
+
+		for (int stmtVarIndex = 0; ; stmtVarIndex++) {
 			Token mname;
 			CType mt = mbase;
 
@@ -639,6 +644,12 @@ static int parse_struct(lua_State* L, Parser* P, int tmp_usr, const CType* ct)
 			assert(lua_gettop(L) == top + 1);
 			parse_argument(L, P, -1, &mt, &mname, NULL);
 			assert(lua_gettop(L) == top + 2);
+
+			// if these are attributes applied to the first type then they should go to mbase ....
+			if (stmtVarIndex == 0) {
+				if (mt.is_packed) mbase.is_packed = 1;
+				if (mt.align_mask) mbase.align_mask = mt.align_mask;
+			}
 
 			if (!mt.is_defined && (mt.pointers - mt.is_array) == 0) {
 				return luaL_error(L, "member type is undefined on line %d", P->line);
@@ -752,6 +763,184 @@ static void instantiate_typedef(Parser* P, CType* tt, const CType* ft)
 	}
 }
 
+
+/* parse_attribute parses a token to see if it is an attribute. It may then
+ * parse some following tokens to decode the attribute setting the appropriate
+ * fields in ct. It will return 1 if the token was used (and possibly some
+ * more following it) or 0 if not. If the token was used, the next token must
+ * be retrieved using next_token/require_token.
+ */
+static int parse_attribute(lua_State* L, Parser* P, Token* tok, CType* ct, Parser* asmname)
+{
+	if (tok->type != TOK_TOKEN) {
+		return 0;
+	} else if (asmname && (IS_LITERAL(*tok, "__asm__") || IS_LITERAL(*tok, "__asm"))) {
+		check_token(L, P, TOK_OPEN_PAREN, NULL, "unexpected token after __asm__ on line %d", P->line);
+		*asmname = *P;
+
+		require_token(L, P, tok);
+		while (tok->type == TOK_STRING) {
+			require_token(L, P, tok);
+		}
+
+		if (tok->type != TOK_CLOSE_PAREN) {
+			luaL_error(L, "unexpected token after __asm__ on line %d", P->line);
+		}
+		return 1;
+	} else if (IS_LITERAL(*tok, "__attribute__") || IS_LITERAL(*tok, "__declspec")) {
+		int parens = 1;
+		check_token(L, P, TOK_OPEN_PAREN, NULL, "expected parenthesis after __attribute__ or __declspec on line %d", P->line);
+
+		for (;;) {
+			require_token(L, P, tok);
+			if (tok->type == TOK_OPEN_PAREN) {
+				parens++;
+			} else if (tok->type == TOK_CLOSE_PAREN) {
+				if (--parens == 0) {
+					break;
+				}
+
+			} else if (tok->type != TOK_TOKEN) {
+				// ignore unknown symbols within parentheses
+
+			} else if (IS_LITERAL(*tok, "align") || IS_LITERAL(*tok, "aligned") || IS_LITERAL(*tok, "__aligned__")) {
+				unsigned align = 0;
+				require_token(L, P, tok);
+
+				switch (tok->type) {
+				case TOK_CLOSE_PAREN:
+					align = ALIGNED_DEFAULT;
+					put_back(P);
+					break;
+
+				case TOK_OPEN_PAREN:
+					int tokenValue = (int) calculate_constant(L, P);
+
+					switch (tokenValue) {
+					case 1: align = 0; break;
+					case 2: align = 1; break;
+					case 4: align = 3; break;
+					case 8: align = 7; break;
+					case 16: align = 15; break;
+					default:
+						luaL_error(L, "unsupported align size %d on line %d", tokenValue, P->line);
+					}
+
+					check_token(L, P, TOK_CLOSE_PAREN, NULL, "align() expected closing parenthesis on line %d", P->line);
+					break;
+
+				default:
+					luaL_error(L, "expected align(#) on line %d", P->line);
+				}
+
+
+				// __attribute__(aligned(#)) is only supposed to increase alignment
+				ct->align_mask = max(align, ct->align_mask);
+
+			} else if (IS_LITERAL(*tok, "packed") || IS_LITERAL(*tok, "__packed__")) {
+				ct->align_mask = 0;
+				ct->is_packed = 1;
+
+			} else if (IS_LITERAL(*tok, "mode") || IS_LITERAL(*tok, "__mode__")) {
+
+				check_token(L, P, TOK_OPEN_PAREN, NULL, "expected mode(MODE) on line %d", P->line);
+
+				require_token(L, P, tok);
+				if (tok->type != TOK_TOKEN) {
+					luaL_error(L, "expected mode(MODE) on line %d", P->line);
+				}
+
+				if (ct->type == FLOAT_TYPE || ct->type == DOUBLE_TYPE) {
+					struct {char ch; float v;} af;
+					struct {char ch; double v;} ad;
+
+					if (IS_LITERAL(*tok, "SF") || IS_LITERAL(*tok, "__SF__")) {
+						ct->type = FLOAT_TYPE;
+						ct->base_size = sizeof(float);
+						ct->align_mask = ALIGNOF(af);
+
+					} else if (IS_LITERAL(*tok, "DF") || IS_LITERAL(*tok, "__DF__")) {
+						ct->type = DOUBLE_TYPE;
+						ct->base_size = sizeof(double);
+						ct->align_mask = ALIGNOF(ad);
+
+					} else {
+						luaL_error(L, "unexpected mode on line %d", P->line);
+					}
+
+				} else {
+					struct {char ch; uint16_t v;} a16;
+					struct {char ch; uint32_t v;} a32;
+					struct {char ch; uint64_t v;} a64;
+
+					if (IS_LITERAL(*tok, "QI") || IS_LITERAL(*tok, "__QI__")
+							|| IS_LITERAL(*tok, "byte") || IS_LITERAL(*tok, "__byte__")
+							) {
+						ct->type = INT8_TYPE;
+						ct->base_size = sizeof(uint8_t);
+						ct->align_mask = 0;
+
+					} else if (IS_LITERAL(*tok, "HI") || IS_LITERAL(*tok, "__HI__")) {
+						ct->type = INT16_TYPE;
+						ct->base_size = sizeof(uint16_t);
+						ct->align_mask = ALIGNOF(a16);
+
+					} else if (IS_LITERAL(*tok, "SI") || IS_LITERAL(*tok, "__SI__")
+#if defined ARCH_X86 || defined ARCH_ARM
+							|| IS_LITERAL(*tok, "word") || IS_LITERAL(*tok, "__word__")
+							|| IS_LITERAL(*tok, "pointer") || IS_LITERAL(*tok, "__pointer__")
+#endif
+							) {
+						ct->type = INT32_TYPE;
+						ct->base_size = sizeof(uint32_t);
+						ct->align_mask = ALIGNOF(a32);
+
+					} else if (IS_LITERAL(*tok, "DI") || IS_LITERAL(*tok, "__DI__")
+#if defined ARCH_X64 || defined ARCH_PPC64
+							|| IS_LITERAL(*tok, "word") || IS_LITERAL(*tok, "__word__")
+							|| IS_LITERAL(*tok, "pointer") || IS_LITERAL(*tok, "__pointer__")
+#endif
+							) {
+						ct->type = INT64_TYPE;
+						ct->base_size = sizeof(uint64_t);
+						ct->align_mask = ALIGNOF(a64);
+
+					} else {
+						luaL_error(L, "unexpected mode on line %d", P->line);
+					}
+				}
+
+				check_token(L, P, TOK_CLOSE_PAREN, NULL, "expected mode(MODE) on line %d", P->line);
+
+			} else if (IS_LITERAL(*tok, "cdecl") || IS_LITERAL(*tok, "__cdecl__")) {
+				ct->calling_convention = C_CALL;
+
+			} else if (IS_LITERAL(*tok, "fastcall") || IS_LITERAL(*tok, "__fastcall__")) {
+				ct->calling_convention = FAST_CALL;
+
+			} else if (IS_LITERAL(*tok, "stdcall") || IS_LITERAL(*tok, "__stdcall__")) {
+				ct->calling_convention = STD_CALL;
+			}
+			// ignore unknown tokens within parentheses
+		}
+		return 1;
+	} else if (IS_LITERAL(*tok, "__cdecl")) {
+		ct->calling_convention = C_CALL;
+		return 1;
+	} else if (IS_LITERAL(*tok, "__fastcall")) {
+		ct->calling_convention = FAST_CALL;
+		return 1;
+	} else if (IS_LITERAL(*tok, "__stdcall")) {
+		ct->calling_convention = STD_CALL;
+		return 1;
+	} else if (IS_LITERAL(*tok, "__extension__") || IS_LITERAL(*tok, "extern")) {
+		// ignore
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
 /* this parses a struct or union starting with the optional
  * name before the opening brace
  * leaves the type usr value on the stack
@@ -762,6 +951,14 @@ static int parse_record(lua_State* L, Parser* P, CType* ct)
 	int top = lua_gettop(L);
 
 	require_token(L, P, &tok);
+
+	// attributes could go here
+	// I think if we get an attribute, but then fail to get an open curly brace, things could go wrong.
+	// meh.
+	// do I have to do this?
+	if (parse_attribute(L, P, &tok, ct, NULL)) {
+		require_token(L, P, &tok);
+	}
 
 	/* name is optional */
 	if (tok.type == TOK_TOKEN) {
@@ -1031,208 +1228,24 @@ static int parse_type_name(
 	return 0;
 }
 
-/* parse_attribute parses a token to see if it is an attribute. It may then
- * parse some following tokens to decode the attribute setting the appropriate
- * fields in ct. It will return 1 if the token was used (and possibly some
- * more following it) or 0 if not. If the token was used, the next token must
- * be retrieved using next_token/require_token.
- */
-static int parse_attribute(lua_State* L, Parser* P, Token* tok, CType* ct, Parser* asmname)
-{
-	if (tok->type != TOK_TOKEN) {
-		return 0;
-
-	} else if (asmname && (IS_LITERAL(*tok, "__asm__") || IS_LITERAL(*tok, "__asm"))) {
-		check_token(L, P, TOK_OPEN_PAREN, NULL, "unexpected token after __asm__ on line %d", P->line);
-		*asmname = *P;
-
-		require_token(L, P, tok);
-		while (tok->type == TOK_STRING) {
-			require_token(L, P, tok);
-		}
-
-		if (tok->type != TOK_CLOSE_PAREN) {
-			luaL_error(L, "unexpected token after __asm__ on line %d", P->line);
-		}
-		return 1;
-
-	} else if (IS_LITERAL(*tok, "__attribute__") || IS_LITERAL(*tok, "__declspec")) {
-		int parens = 1;
-		check_token(L, P, TOK_OPEN_PAREN, NULL, "expected parenthesis after __attribute__ or __declspec on line %d", P->line);
-
-		for (;;) {
-			require_token(L, P, tok);
-			if (tok->type == TOK_OPEN_PAREN) {
-				parens++;
-			} else if (tok->type == TOK_CLOSE_PAREN) {
-				if (--parens == 0) {
-					break;
-				}
-
-			} else if (tok->type != TOK_TOKEN) {
-				/* ignore unknown symbols within parentheses */
-
-			} else if (IS_LITERAL(*tok, "align") || IS_LITERAL(*tok, "aligned") || IS_LITERAL(*tok, "__aligned__")) {
-				unsigned align = 0;
-				require_token(L, P, tok);
-
-				switch (tok->type) {
-				case TOK_CLOSE_PAREN:
-					align = ALIGNED_DEFAULT;
-					put_back(P);
-					break;
-
-				case TOK_OPEN_PAREN:
-					int tokenValue = (int) calculate_constant(L, P);
-
-					switch (tokenValue) {
-					case 1: align = 0; break;
-					case 2: align = 1; break;
-					case 4: align = 3; break;
-					case 8: align = 7; break;
-					case 16: align = 15; break;
-					default:
-						luaL_error(L, "unsupported align size %d on line %d", tokenValue, P->line);
-					}
-
-					check_token(L, P, TOK_CLOSE_PAREN, NULL, "align() expected closing parenthesis on line %d", P->line);
-					break;
-
-				default:
-					luaL_error(L, "expected align(#) on line %d", P->line);
-				}
-
-
-				/* __attribute__(aligned(#)) is only supposed to increase alignment */
-				ct->align_mask = max(align, ct->align_mask);
-
-			} else if (IS_LITERAL(*tok, "packed") || IS_LITERAL(*tok, "__packed__")) {
-				ct->align_mask = 0;
-				ct->is_packed = 1;
-
-			} else if (IS_LITERAL(*tok, "mode") || IS_LITERAL(*tok, "__mode__")) {
-
-				check_token(L, P, TOK_OPEN_PAREN, NULL, "expected mode(MODE) on line %d", P->line);
-
-				require_token(L, P, tok);
-				if (tok->type != TOK_TOKEN) {
-					luaL_error(L, "expected mode(MODE) on line %d", P->line);
-				}
-
-				if (ct->type == FLOAT_TYPE || ct->type == DOUBLE_TYPE) {
-					struct {char ch; float v;} af;
-					struct {char ch; double v;} ad;
-
-					if (IS_LITERAL(*tok, "SF") || IS_LITERAL(*tok, "__SF__")) {
-						ct->type = FLOAT_TYPE;
-						ct->base_size = sizeof(float);
-						ct->align_mask = ALIGNOF(af);
-
-					} else if (IS_LITERAL(*tok, "DF") || IS_LITERAL(*tok, "__DF__")) {
-						ct->type = DOUBLE_TYPE;
-						ct->base_size = sizeof(double);
-						ct->align_mask = ALIGNOF(ad);
-
-					} else {
-						luaL_error(L, "unexpected mode on line %d", P->line);
-					}
-
-				} else {
-					struct {char ch; uint16_t v;} a16;
-					struct {char ch; uint32_t v;} a32;
-					struct {char ch; uint64_t v;} a64;
-
-					if (IS_LITERAL(*tok, "QI") || IS_LITERAL(*tok, "__QI__")
-							|| IS_LITERAL(*tok, "byte") || IS_LITERAL(*tok, "__byte__")
-							) {
-						ct->type = INT8_TYPE;
-						ct->base_size = sizeof(uint8_t);
-						ct->align_mask = 0;
-
-					} else if (IS_LITERAL(*tok, "HI") || IS_LITERAL(*tok, "__HI__")) {
-						ct->type = INT16_TYPE;
-						ct->base_size = sizeof(uint16_t);
-						ct->align_mask = ALIGNOF(a16);
-
-					} else if (IS_LITERAL(*tok, "SI") || IS_LITERAL(*tok, "__SI__")
-#if defined ARCH_X86 || defined ARCH_ARM
-							|| IS_LITERAL(*tok, "word") || IS_LITERAL(*tok, "__word__")
-							|| IS_LITERAL(*tok, "pointer") || IS_LITERAL(*tok, "__pointer__")
-#endif
-							) {
-						ct->type = INT32_TYPE;
-						ct->base_size = sizeof(uint32_t);
-						ct->align_mask = ALIGNOF(a32);
-
-					} else if (IS_LITERAL(*tok, "DI") || IS_LITERAL(*tok, "__DI__")
-#if defined ARCH_X64 || defined ARCH_PPC64
-							|| IS_LITERAL(*tok, "word") || IS_LITERAL(*tok, "__word__")
-							|| IS_LITERAL(*tok, "pointer") || IS_LITERAL(*tok, "__pointer__")
-#endif
-							) {
-						ct->type = INT64_TYPE;
-						ct->base_size = sizeof(uint64_t);
-						ct->align_mask = ALIGNOF(a64);
-
-					} else {
-						luaL_error(L, "unexpected mode on line %d", P->line);
-					}
-				}
-
-				check_token(L, P, TOK_CLOSE_PAREN, NULL, "expected mode(MODE) on line %d", P->line);
-
-			} else if (IS_LITERAL(*tok, "cdecl") || IS_LITERAL(*tok, "__cdecl__")) {
-				ct->calling_convention = C_CALL;
-
-			} else if (IS_LITERAL(*tok, "fastcall") || IS_LITERAL(*tok, "__fastcall__")) {
-				ct->calling_convention = FAST_CALL;
-
-			} else if (IS_LITERAL(*tok, "stdcall") || IS_LITERAL(*tok, "__stdcall__")) {
-				ct->calling_convention = STD_CALL;
-			}
-			/* ignore unknown tokens within parentheses */
-		}
-		return 1;
-
-	} else if (IS_LITERAL(*tok, "__cdecl")) {
-		ct->calling_convention = C_CALL;
-		return 1;
-
-	} else if (IS_LITERAL(*tok, "__fastcall")) {
-		ct->calling_convention = FAST_CALL;
-		return 1;
-
-	} else if (IS_LITERAL(*tok, "__stdcall")) {
-		ct->calling_convention = STD_CALL;
-		return 1;
-
-	} else if (IS_LITERAL(*tok, "__extension__") || IS_LITERAL(*tok, "extern")) {
-		/* ignore */
-		return 1;
-
-	} else {
-		return 0;
-	}
-}
 
 /*
 Parses out the base type of a type expression in a function declaration, struct definition, typedef etc.
 Leaves the uservalue 1 of the ctype userdata on the stack.
 */
-void parse_type(
+CType parse_type(
 	lua_State * L,
-	Parser * P,
-	CType * ct	// out
+	Parser * P
 ) {								// stack: ...
 	int top = lua_gettop(L);
 
-	memset(ct, 0, sizeof(*ct));
+	CType ct;
+	memset(&ct, 0, sizeof(ct));
 
 	Token tok;
 	require_token(L, P, &tok);
 
 	if (tok.type == TOK_DOLLARSIGN) {
-//printf("here requesting a type param with lua top %d\n", lua_gettop(L));
 		// use our type params
 		//require_token(L, P, &tok);
 
@@ -1251,18 +1264,18 @@ void parse_type(
 		}
 
 int top = lua_gettop(L);
-		check_ctype(L, typeLuaLoc, ct, 0);	// don't do args for args
+		check_ctype(L, typeLuaLoc, &ct, 0);	// don't do args for args
 assert(lua_gettop(L) == top+1);
-		return;
+		return ct;
 	}
 
 	// get const/volatile before the base type
 	for (;;) {
 		if (tok.type != TOK_TOKEN) {
 			luaL_error(L, "unexpected token %d before type name on line %d", tok.type, P->line);
-			return;
+			return ct;
 		} else if (IS_CONST(tok)) {
-			ct->const_mask = 1;
+			ct.const_mask = 1;
 			require_token(L, P, &tok);
 
 		} else if (IS_VOLATILE(tok) ||
@@ -1271,7 +1284,7 @@ assert(lua_gettop(L) == top+1);
 				   IS_INLINE(tok)) {
 			// ignored for now
 			require_token(L, P, &tok);
-		} else if (parse_attribute(L, P, &tok, ct, NULL)) {
+		} else if (parse_attribute(L, P, &tok, &ct, NULL)) {
 			// get function attributes before the return type
 			require_token(L, P, &tok);
 
@@ -1283,18 +1296,18 @@ assert(lua_gettop(L) == top+1);
 	// get base type
 	if (tok.type != TOK_TOKEN) {
 		luaL_error(L, "unexpected token %d before type name on line %d", tok.type, P->line);
-		return;
+		return ct;
 	} else if (IS_LITERAL(tok, "struct")) {
-		ct->type = STRUCT_TYPE;
-		parse_record(L, P, ct);
+		ct.type = STRUCT_TYPE;
+		parse_record(L, P, &ct);
 
 	} else if (IS_LITERAL(tok, "union")) {
-		ct->type = UNION_TYPE;
-		parse_record(L, P, ct);
+		ct.type = UNION_TYPE;
+		parse_record(L, P, &ct);
 
 	} else if (IS_LITERAL(tok, "enum")) {
-		ct->type = ENUM_TYPE;
-		parse_record(L, P, ct);
+		ct.type = ENUM_TYPE;
+		parse_record(L, P, &ct);
 
 	} else {
 		put_back(P);
@@ -1308,10 +1321,10 @@ assert(lua_gettop(L) == top+1);
 		if (lua_isnil(L, -1)) {
 			lua_pushlstring(L, tok.str, tok.size);
 			luaL_error(L, "unknown type %s on line %d", lua_tostring(L, -1), P->line);
-			return;
+			return ct;
 		}
 
-		instantiate_typedef(P, ct, (const CType*) lua_touserdata(L, -1));
+		instantiate_typedef(P, &ct, (const CType*) lua_touserdata(L, -1));
 
 		// we only want the uservalue from the ctype
 		lua_getuservalue(L, -1);			// stack: ..., ctype, ctype uservalue 1
@@ -1333,6 +1346,8 @@ assert(lua_gettop(L) == top+1);
 	}
 
 	assert(lua_gettop(L) == top + 1 && (lua_istable(L, -1) || lua_isnil(L, -1)));
+
+	return ct;
 }
 
 enum name_type {
@@ -1587,7 +1602,7 @@ static void parse_function_arguments(lua_State* L, Parser* P, int ct_usr, CType*
 			CType at;
 
 			put_back(P);
-			parse_type(L, P, &at);
+			at = parse_type(L, P);
 			parse_argument(L, P, -1, &at, NULL, NULL);
 
 			assert(lua_gettop(L) == top + 2);
@@ -1973,8 +1988,7 @@ void parse_argument(
 static void parse_typedef(lua_State* L, Parser* P) {
 	int top = lua_gettop(L);
 
-	CType base_type;
-	parse_type(L, P, &base_type);
+	CType base_type = parse_type(L, P);
 
 	Token tok;
 	for (;;) {
@@ -2220,7 +2234,7 @@ static int parse_root(lua_State* L, Parser* P)
 			memset(&asmname, 0, sizeof(asmname));
 
 			put_back(P);
-			parse_type(L, P, &type);
+			type = parse_type(L, P);
 
 			for (;;) {
 				parse_argument(L, P, -1, &type, &name, &asmname);
@@ -2354,7 +2368,7 @@ static int try_cast(lua_State* L)
 	Token name, tok;
 	memset(&name, 0, sizeof(name));
 
-	parse_type(L, P, &ct);
+	ct = parse_type(L, P);
 	parse_argument(L, P, -1, &ct, &name, NULL);
 
 	require_token(L, P, &tok);
@@ -2466,7 +2480,7 @@ static int64_t calculate_constant2(lua_State* L, Parser* P, Token* tok)
 			luaL_error(L, "invalid sizeof at line %d", P->line);
 		}
 
-		parse_type(L, P, &type);
+		type = parse_type(L, P);
 		parse_argument(L, P, -1, &type, NULL, NULL);
 		lua_pop(L, 2);
 

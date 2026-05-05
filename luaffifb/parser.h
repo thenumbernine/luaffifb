@@ -15,10 +15,13 @@ struct Token;
 
 Parser newParser(lua_State *L, char const * str, int argLoc);
 
-void parse_type(
+// idk who put this as an out pointer when the CType struct itself was intentionally designed to just be a primitive type (int? size_t?) with a union of a bunch of bitfields.
+// why cripple a struct's flexibility to adhere to things like limited pointer count just to make it fit in a single primitive intgral,
+//  and then turn around and pass-out-by-ptr when you could just return the int.
+// so now I changed this to return CType.
+CType parse_type(
 	lua_State * L,
-	Parser * P,
-	CType * type);
+	Parser * P);
 
 void parse_argument(
 	lua_State * L,

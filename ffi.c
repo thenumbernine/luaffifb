@@ -3761,8 +3761,7 @@ static void add_typedef(
 	Parser P = newParser(L, from, 0); // 0 == don't use type params, since this is just used internally here for some quick typedefs and there's no $'s in the typedef strings
 
 	pushRegistry(L, &types_key);				// stack: ..., registry[&types_key]
-	CType ct;
-	parse_type(L, &P, &ct);						// stack: ..., registry[&types_key], ctype uservalue[1]
+	CType ct = parse_type(L, &P);						// stack: ..., registry[&types_key], ctype uservalue[1]
 	parse_argument(L, &P, -1, &ct, NULL, NULL);	// stack: ..., registry[&types_key], ctype uservalue[1], arg??? uservalue[1]
 	push_ctype(L, -1, &ct);						// stack: ..., registry[&types_key], ctype uservalue[1], arg uservalue[1], userdata copy of ct
 
