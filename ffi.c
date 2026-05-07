@@ -2930,7 +2930,7 @@ err:
 static int ctype_eq(lua_State * L) {
 	CType a, b;
 	check_ctype(L, 1, &a, 0);
-	check_ctype(L, 1, &b, 0);
+	check_ctype(L, 2, &b, 0);
 	lua_pushboolean(L, !memcmp(&a, &b, sizeof(a)));
 	return 1;
 }
