@@ -1449,10 +1449,15 @@ static void append_type_name(luaL_Buffer* B, int usr, const CType* ct, enum name
 			luaL_error(L, "internal error - bad type %d", ct->type);
 		}
 
+		if (ct->pointers - ct->is_array > 0) {
+			luaL_addchar(B, ' ');
+		}
 		for (i = 0; i < ct->pointers - ct->is_array; i++) {
 			luaL_addchar(B, '*');
 			if (ct->const_mask & (1 << (ct->pointers - i - 1))) {
-				luaL_addstring(B, " const");
+				// *const has no space between it
+				// but const * has spaces between it
+				luaL_addstring(B, "const ");
 			}
 		}
 	}
@@ -1463,9 +1468,9 @@ static void append_type_name(luaL_Buffer* B, int usr, const CType* ct, enum name
 		}
 
 		if (ct->is_variable_array && !ct->variable_size_known) {
-			luaL_addstring(B, "[?]");
+			luaL_addstring(B, " [?]");
 		} else if (ct->is_array) {
-			lua_pushfstring(L, "[%d]", (int) ct->array_size);
+			lua_pushfstring(L, " [%d]", (int) ct->array_size);
 			luaL_addvalue(B);
 		}
 
