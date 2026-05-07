@@ -12,6 +12,9 @@ I am forking the old luaffifb project to get it working with my [lua-ffi-wasm](h
 - `__attribute__((aligned()))` now handles expressions.
 - `__attribute__((aligned()))` now works on all variables of the statement, before it would just apply to the first.
 - `struct` now has attributes, not just fields in `struct`.
+- arrays-of-ctypes no longer metatable-index into their base-ctype (which was incorrect buggy behavior).
+- cdata-of-arrays-of-ctypes " " " " ".
+- defining ffi metatypes of arrays-of-ctypes now errors like it should.
 
 # Changes I've made
 

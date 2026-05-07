@@ -1665,6 +1665,11 @@ static int ffi_metatype(lua_State* L)
 	lua_settop(L, 2);
 
 	check_ctype(L, 1, &ct, 0);
+
+	if (ct.is_array) {
+		return luaL_error(L, "bad argument #1 to 'metatype' (invalid C type)");
+	}
+
 	if (lua_type(L, 2) != LUA_TTABLE && lua_type(L, 2) != LUA_TNIL) {
 		return luaL_argerror(L, 2, "metatable must be a table or nil");
 	}
@@ -1868,8 +1873,15 @@ static int cdata_index(lua_State* L)
 
 	off = lookup_cdata_index(L, 2, -1, &ct);
 
-	if (off < 0) {
+	if (off < 0) {	// no ctype field found (right?)
 		assert(lua_gettop(L) == 3);
+
+		// if it's an array type and no field was found then error
+		// don't let the array use the base type's ctype meta-info.
+		if (ct.is_array) {
+			goto err;
+		}
+
 		if (!push_user_mt(L, -1, &ct)) {
 			goto err;
 		}
@@ -1897,11 +1909,11 @@ err:
 		return luaL_error(L, "type %s has no member %s", lua_tostring(L, -1), lua_tostring(L, 2));
 	}
 
-	assert(lua_gettop(L) == 4); /* ct, key, ct_usr, mbr_usr */
+	assert(lua_gettop(L) == 4); // ct, key, ct_usr, mbr_usr
 	data += off;
 
 	if (ct.is_array) {
-		/* push a reference to the array */
+		// push a reference to the array
 		ct.is_reference = 1;
 		to = push_cdata(L, -1, &ct);
 		*(void**) to = data;
@@ -2879,6 +2891,13 @@ static int ctype_index(lua_State * L) {
 	check_ctype(L, 1, &ct, 0);
 
 	// taken from cdata_index
+
+	// if we're indexing into a ctype object
+	// and it's an arrya-of-something
+	// then we don't want it interacting with the base type's metatable
+	if (ct.is_array) {
+		goto err;
+	}
 
 	assert(lua_gettop(L) == 3);
 	if (!push_user_mt(L, -1, &ct)) {
