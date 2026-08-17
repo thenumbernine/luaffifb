@@ -15,6 +15,7 @@ I am forking the old luaffifb project to get it working with my [lua-ffi-wasm](h
 - arrays-of-ctypes no longer metatable-index into their base-ctype (which was incorrect buggy behavior).
 - cdata-of-arrays-of-ctypes " " " " ".
 - defining ffi metatypes of arrays-of-ctypes now errors like it should.
+- `ffi.string` and `ffi.copy` with a definite size will now handle any kind of pointer, not just `char*` pointers.
 
 # Changes I've made
 

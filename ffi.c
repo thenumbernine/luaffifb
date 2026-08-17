@@ -3095,7 +3095,10 @@ static int ffi_string(
 		lua_pushlstring(L, data, (size_t) luaL_checknumber(L, 2));
 		return 1;
 
-	} else if (ct.type == INT8_TYPE && ct.pointers == 1) {
+	} else if (
+		//ct.type == INT8_TYPE && // luajit allows ffi.string of any kind of pointer when you define the size
+		ct.pointers == 1
+	) {
 		size_t sz;
 
 		if (lua_isuserdata(L, 2)) {
@@ -3108,10 +3111,16 @@ static int ffi_string(
 			sz = (size_t) luaL_checknumber(L, 2);
 
 		} else if (ct.is_array && !ct.is_variable_array) {
+			// array type without definite size?  error if not char*...
+			if (ct.type != INT8_TYPE) return luaL_error(L, "cannot convert cdata to string");
+
 			char* nul = (char*)memchr(data, '\0', ct.array_size);
 			sz = nul ? nul - data : ct.array_size;
 
 		} else {
+			// array type without definite size?  error if not char*...
+			if (ct.type != INT8_TYPE) return luaL_error(L, "cannot convert cdata to string");
+
 			sz = strlen(data);
 		}
 
@@ -3134,8 +3143,11 @@ static int ffi_copy(lua_State* L)
 	if (!lua_isnoneornil(L, 3)) {
 		memcpy(to, from, (size_t) luaL_checknumber(L, 3));
 
-	} else if (ft.type == INT8_TYPE && ft.pointers == 1) {
-		size_t sz = ft.is_array ? ft.array_size : strlen(from);
+	} else if (
+		//ft.type == INT8_TYPE && // luajit allows ffi.string of any kind of pointer
+		ft.pointers == 1
+	) {
+		size_t sz = ft.is_array ? (ft.base_size * ft.array_size) : strlen(from);
 		memcpy(to, from, sz);
 		to[sz] = '\0';
 	}
