@@ -3085,11 +3085,21 @@ static int ffi_number(lua_State* L) {
 static int ffi_string(
 	lua_State * L
 ) {
-	CType ct;
-	char* data;
 	lua_settop(L, 2);
 
-	data = (char*) check_cdata(L, 1, &ct);
+	if (lua_type(L, 1) == LUA_TSTRING) {
+		if (lua_isnil(L, 2)) {
+			lua_settop(L, 1);
+			return 1;	// return the string as-is
+		}
+		size_t sz = (size_t) luaL_checknumber(L, 2);
+		char const * data = lua_tostring(L, 1);
+		lua_pushlstring(L, data, sz);
+		return 1;
+	}
+
+	CType ct;
+	char *data = (char*) check_cdata(L, 1, &ct);
 
 	if (is_void_ptr(&ct)) {
 		lua_pushlstring(L, data, (size_t) luaL_checknumber(L, 2));
