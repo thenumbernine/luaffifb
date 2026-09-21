@@ -244,8 +244,13 @@ int callValuePush(
 		}
 		return 1;
 
+	/* libffi widens any integer return narrower than ffi_arg into exactly one
+	   ffi_arg-sized slot, and closure arguments arrive the same way. Reading
+	   the union member instead reads bytes libffi never wrote wherever
+	   sizeof(ffi_arg) is smaller - wasm32, where it is 4 against int64_t.
+	   ffi_sarg is sign-extended by libffi within the slot. */
 	case BOOL_TYPE:
-		lua_pushboolean(L, ret->uintptrValue);	// stack: ..., return boolean
+		lua_pushboolean(L, (int)(*(ffi_arg const *)ret != 0));	// stack: ..., return boolean
 		return 1;
 
 	case ENUM_TYPE:
@@ -253,9 +258,9 @@ int callValuePush(
 	case INT16_TYPE:
 	case INT32_TYPE:
 		if (retCType->is_unsigned) {
-			lua_pushnumber(L, (lua_Number)ret->uintptrValue);	// stack: ..., return number
+			lua_pushnumber(L, (lua_Number)*(ffi_arg const *)ret);	// stack: ..., return number
 		} else {
-			lua_pushnumber(L, (lua_Number)ret->intptrValue);	// stack: ..., return number
+			lua_pushnumber(L, (lua_Number)*(ffi_sarg const *)ret);	// stack: ..., return number
 		}
 		return 1;
 
