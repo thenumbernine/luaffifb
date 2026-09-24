@@ -210,8 +210,26 @@ void luaToCallValue(
 }
 
 
+// Reads a BOOL/INT8/INT16/INT32/ENUM value out of libffi's storage.
+// A return value is widened by libffi into one ffi_arg-sized slot, sign-extended as ffi_sarg.
+// A closure argument is not: it is stored at the width of its ffi_type (see getFFITypeForCType).
+static lua_Number narrowIntValue(CType const * ctype, void const * p, int isReturn) {
+	if (isReturn) {
+		return ctype->is_unsigned ? (lua_Number)*(ffi_arg const *)p : (lua_Number)*(ffi_sarg const *)p;
+	}
+	switch (ctype->type) {
+	case BOOL_TYPE:
+	case INT8_TYPE:
+		return ctype->is_unsigned ? (lua_Number)*(uint8_t const *)p : (lua_Number)*(int8_t const *)p;
+	case INT16_TYPE:
+		return ctype->is_unsigned ? (lua_Number)*(uint16_t const *)p : (lua_Number)*(int16_t const *)p;
+	default:	// INT32_TYPE, ENUM_TYPE
+		return ctype->is_unsigned ? (lua_Number)*(uint32_t const *)p : (lua_Number)*(int32_t const *)p;
+	}
+}
+
 // Returns how many values were pushed onto the stack ... 1, or for non-pointer VOID_TYPE 0
-// Used by callLuaToCWithLibFFI return data
+// Used by callLuaToCWithLibFFI return data, and by the closure callback for its arguments
 int callValuePush(
 	lua_State * L,
 
@@ -221,7 +239,10 @@ int callValuePush(
 	// return type's CType's userdata's uservalue[1]'s location, cannot be negative
 	int retCTypeUserValueLoc,
 
-	CallValue const * ret
+	CallValue const * ret,
+
+	// 1 if ret is a return value from libffi, 0 if it is a closure argument
+	int isReturn
 ) {
 	if (retCType->pointers || retCType->is_reference) {
 		// the function returned a pointer ...
@@ -244,24 +265,18 @@ int callValuePush(
 		}
 		return 1;
 
-	/* libffi widens any integer return narrower than ffi_arg into exactly one
-	   ffi_arg-sized slot, and closure arguments arrive the same way. Reading
-	   the union member instead reads bytes libffi never wrote wherever
-	   sizeof(ffi_arg) is smaller - wasm32, where it is 4 against int64_t.
-	   ffi_sarg is sign-extended by libffi within the slot. */
+	// Not through the CallValue union: its integer members can be wider than the
+	// storage libffi wrote, which is sizeof(ffi_arg) for a return and the ffi_type's
+	// own size for a closure argument.
 	case BOOL_TYPE:
-		lua_pushboolean(L, (int)(*(ffi_arg const *)ret != 0));	// stack: ..., return boolean
+		lua_pushboolean(L, (int)(narrowIntValue(retCType, ret, isReturn) != 0));	// stack: ..., return boolean
 		return 1;
 
 	case ENUM_TYPE:
 	case INT8_TYPE:
 	case INT16_TYPE:
 	case INT32_TYPE:
-		if (retCType->is_unsigned) {
-			lua_pushnumber(L, (lua_Number)*(ffi_arg const *)ret);	// stack: ..., return number
-		} else {
-			lua_pushnumber(L, (lua_Number)*(ffi_sarg const *)ret);	// stack: ..., return number
-		}
+		lua_pushnumber(L, narrowIntValue(retCType, ret, isReturn));	// stack: ..., return number
 		return 1;
 
 	case INT64_TYPE:
@@ -414,7 +429,7 @@ DEBUGPRINT("...ret luaffi-type=%d name=%s libffi-type-ptr=%p\n", retCType->type,
 	lua_pop(L, 1);
 #endif
 
-	int nresult = callValuePush(L, retCType, retCTypeUserValueLoc, &ret);
+	int nresult = callValuePush(L, retCType, retCTypeUserValueLoc, &ret, 1);
 
 DEBUGPRINT("callLuaToCWithLibFFI DONE, top=%d returning %d\n\n", lua_gettop(L), nresult);
 	return nresult;
@@ -612,7 +627,7 @@ assert(lua_gettop(L) == top+2);
 		lua_remove(L, -2);												// stack: ..., lua func ctype uservalue, lua func, (prev arg Lua values...), arg ctype uservalue userdata
 		int argCTypeUserValueLoc = lua_gettop(L);
 
-		int result = callValuePush(L, argCType, argCTypeUserValueLoc, ffiArgPtrs[i-1]);	// stack: ..., lua func ctype uservalue, lua func, (prev arg Lua values...), arg ctype uservalue userdata, arg lua value
+		int result = callValuePush(L, argCType, argCTypeUserValueLoc, ffiArgPtrs[i-1], 0);	// stack: ..., lua func ctype uservalue, lua func, (prev arg Lua values...), arg ctype uservalue userdata, arg lua value
 		assert(result == 1); // except void and ... structs ?!?!?!?
 		lua_remove(L, -2);	// stack: ..., lua func ctype uservalue, lua func, (prev arg Lua values...), arg lua value
 		assert(lua_gettop(L) == top+2+i);
