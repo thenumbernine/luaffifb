@@ -629,7 +629,8 @@ static int parse_struct(lua_State* L, Parser* P, int tmp_usr, const CType* ct)
 		// if struct-packed is defined then define the field packed too
 		// is this how struct-packed vs field-packed works?
 		mbase.is_packed = ct->is_packed;
-		mbase.align_mask = ct->align_mask;
+		// a member keeps its own type's alignment; only packing drops it
+		if (ct->is_packed) mbase.align_mask = 0;
 
 		for (int stmtVarIndex = 0; ; stmtVarIndex++) {
 			Token mname;
