@@ -192,6 +192,7 @@ static int cdata_tointeger(lua_State* L, int idx, ptrdiff_t* val)
 		*val = *(int16_t*)addr;
 		return 1;
 	case INT32_TYPE:
+	case ENUM_TYPE:
 		*val = *(int32_t*)addr;
 		return 1;
 	case INT64_TYPE:
@@ -227,6 +228,7 @@ static int64_t check_intptr(lua_State* L, int idx, void* p, CType* ct)
 		return *(int64_t*) p;
 
 	case INT32_TYPE:
+	case ENUM_TYPE:
 		return ct->is_unsigned ? (int64_t) *(uint32_t*) p : (int64_t) *(int32_t*) p;
 
 	case INT16_TYPE:

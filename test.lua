@@ -824,6 +824,13 @@ assert(ffi.istype('int[3]', ffi.new('const int[3]')))
 -- a function pointer. Type of &signal.
 check(tostring(ffi.typeof('void (*foo(int, void(*)(int)))(int)')):match('%b<>'), '<void (*(*)(int, void (*)(int)))(int)>')
 
+-- An enum cdata converts to its integer value, as on LuaJIT
+check(tonumber(ffi.cast('enum e16', 'BAR16')), 257)
+check(tonumber(ffi.new('enum e32', 'BIG32')), 0x40000000)
+check(tonumber(ffi.cast('int', ffi.cast('enum e8', 'BAR8'))), 1)
+check(ffi.cast('enum e16', 'BAR16') < 258, true)
+check(ffi.cast('enum e16', 'BAR16') <= 256, false)
+
 -- Make sure we pass all arguments to tonumber
 check(tonumber('FE', 16), 0xFE)
 
