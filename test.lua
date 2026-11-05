@@ -830,6 +830,10 @@ check(tonumber(ffi.new('enum e32', 'BIG32')), 0x40000000)
 check(tonumber(ffi.cast('int', ffi.cast('enum e8', 'BAR8'))), 1)
 check(ffi.cast('enum e16', 'BAR16') < 258, true)
 check(ffi.cast('enum e16', 'BAR16') <= 256, false)
+check(tonumber(ffi.cast('enum e16', 'BAR16') + 1), 258)
+check(tonumber(1 + ffi.cast('enum e16', 'BAR16')), 258)
+check(tonumber(ffi.cast('enum e8', 'BAR8') * 2), 2)
+check(ffi.istype('int64_t', ffi.new('int32_t', 4) + 1), true)
 
 -- Make sure we pass all arguments to tonumber
 check(tonumber('FE', 16), 0xFE)

@@ -2116,6 +2116,21 @@ static void push_complex(lua_State* L, complex_double res, int ct_usr, const CTy
 
 static void push_number(lua_State* L, int64_t val, int ct_usr, const CType* ct)
 {
+	CType wide;
+
+	/* Arithmetic results narrower than 64 bits (int32, enum, ...) are
+	 * returned as int64_t, as LuaJIT does. Writing the 8-byte value into a
+	 * cdata of the narrower operand type would overflow it, and an enum
+	 * operand on the left has no size at all here. */
+	if (!ct->pointers && ct->type != INT64_TYPE && ct->type != INTPTR_TYPE) {
+		memset(&wide, 0, sizeof(wide));
+		wide.type = INT64_TYPE;
+		wide.base_size = sizeof(int64_t);
+		wide.is_defined = 1;
+		ct = &wide;
+		ct_usr = 0;
+	}
+
 	if ((ct->pointers || ct->type == INTPTR_TYPE) && sizeof(intptr_t) != sizeof(int64_t)) {
 		intptr_t* p = (intptr_t*) push_cdata(L, ct_usr, ct);
 		*p = val;
