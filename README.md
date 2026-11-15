@@ -17,6 +17,7 @@ I am forking the old luaffifb project to get it working with my [lua-ffi-wasm](h
 - defining ffi metatypes of arrays-of-ctypes now errors like it should.
 - `ffi.string` and `ffi.copy` with a definite size will now handle any kind of pointer, not just `char*` pointers.
 - `ffi.string` now works on lua strings.
+- signed bitfields.
 
 # Changes I've made
 
