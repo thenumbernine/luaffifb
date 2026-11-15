@@ -1922,7 +1922,6 @@ err:
 		return 1;
 
 	} else if (ct.is_bitfield) {
-
 		if (ct.type == INT64_TYPE) {
 			CType rt;
 			uint64_t val = *(uint64_t*) data;
@@ -1932,11 +1931,15 @@ err:
 			memset(&rt, 0, sizeof(rt));
 			rt.base_size = 8;
 			rt.type = INT64_TYPE;
-			rt.is_unsigned = 1;
+			rt.is_unsigned = ct.is_unsigned;
 			rt.is_defined = 1;
 
 			to = push_cdata(L, 0, &rt);
-			*(uint64_t*) to = val;
+			if (!ct.is_unsigned) {
+				unsigned int shift = 64 - ct.bit_size;
+				val = (uint64_t)((int64_t)(val << shift) >> shift);
+			}
+			*(uint64_t*)to = val;
 
 			return 1;
 
@@ -1949,6 +1952,10 @@ err:
 			uint64_t val = *(uint64_t*) data;
 			val >>= ct.bit_offset;
 			val &= (UINT64_C(1) << ct.bit_size) - 1;
+			if (!ct.is_unsigned) {
+				unsigned int shift = 64 - ct.bit_size;
+				val = (uint64_t)((int64_t)(val << shift) >> shift);
+			}
 			lua_pushinteger(L, val);
 			return 1;
 		}
